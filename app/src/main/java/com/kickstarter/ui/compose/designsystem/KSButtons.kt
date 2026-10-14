@@ -1,0 +1,996 @@
+package com.kickstarter.ui.compose.designsystem
+
+import android.content.res.Configuration
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons // TODO
+import androidx.compose.material.icons.filled.Close // TODO
+import androidx.compose.material.icons.filled.KeyboardArrowDown // TODO
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.shadow.Shadow
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.dp
+import com.kickstarter.R
+import com.kickstarter.libs.utils.safeLet
+import com.kickstarter.ui.activities.compose.search.FilterRowPillType
+import com.kickstarter.ui.compose.KSCircleImage
+import com.kickstarter.ui.compose.designsystem.KSTheme.colors
+import com.kickstarter.ui.compose.designsystem.KSTheme.dimensions
+import com.kickstarter.ui.compose.designsystem.KSTheme.typographyV2
+import com.kickstarter.ui.compose.designsystem.videoplayer.icons.Bookmark
+import com.kickstarter.ui.compose.designsystem.videoplayer.icons.Ellipsis
+import com.kickstarter.ui.compose.designsystem.videoplayer.icons.Forward
+import com.kickstarter.ui.compose.designsystem.videoplayer.icons.Play
+import com.kickstarter.ui.compose.designsystem.videoplayer.icons.Rewind
+import com.kickstarter.ui.compose.designsystem.videoplayer.icons.Share
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
+
+@Composable
+@Preview(name = "Light", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+fun KSPrimaryButtonsPreview() {
+    KSTheme {
+        Column(
+            Modifier
+                .background(color = colors.backgroundSurfacePrimary)
+                .padding(all = dimensions.paddingSmall)
+        ) {
+            KSPrimaryGreenButton(
+                onClickAction = { },
+                isEnabled = true,
+                text = "Back this project"
+            )
+
+            Spacer(modifier = Modifier.height(dimensions.listItemSpacingSmall))
+
+            KSPrimaryBlueButton(
+                onClickAction = { },
+                isEnabled = true,
+                text = "Manage your pledge"
+            )
+
+            Spacer(modifier = Modifier.height(dimensions.listItemSpacingSmall))
+
+            KSPrimaryBlackButton(
+                onClickAction = { },
+                isEnabled = true,
+                text = "Share this project"
+            )
+        }
+    }
+}
+
+@Composable
+@Preview(name = "Light", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+fun KSSecondaryButtonsPreview() {
+    KSTheme {
+        Column(
+            Modifier
+                .background(color = colors.backgroundSurfacePrimary)
+                .padding(all = dimensions.paddingSmall)
+        ) {
+            KSSecondaryGreyButton(
+                onClickAction = { },
+                isEnabled = true,
+                text = "Fix your pledge"
+            )
+
+            Spacer(modifier = Modifier.height(dimensions.listItemSpacingSmall))
+
+            KSSecondaryWhiteButton(
+                onClickAction = { },
+                isEnabled = true,
+                text = "Back this project"
+            )
+
+            Spacer(modifier = Modifier.height(dimensions.listItemSpacingSmall))
+
+            KSSecondaryRedButton(
+                onClickAction = { },
+                isEnabled = true,
+                text = "Cancel my pledge"
+            )
+        }
+    }
+}
+
+@Composable
+@Preview(name = "Light", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+fun KSDisabledButtonsPreview() {
+    KSTheme {
+        Column(
+            Modifier
+                .background(color = colors.backgroundSurfacePrimary)
+                .padding(all = dimensions.paddingSmall)
+        ) {
+            KSPrimaryGreenButton(
+                onClickAction = { },
+                isEnabled = false,
+                text = "Back this project"
+            )
+        }
+    }
+}
+
+@Composable
+@Preview(name = "Light", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+fun KSOtherButtonsPreview() {
+    KSTheme {
+        Column(
+            Modifier
+                .background(color = colors.backgroundSurfacePrimary)
+                .padding(all = dimensions.paddingSmall)
+        ) {
+            KSFacebookButton(
+                onClickAction = { },
+                text = "Continue with Facebook",
+                isEnabled = true
+            )
+
+            Spacer(modifier = Modifier.height(dimensions.listItemSpacingSmall))
+
+            KSGooglePayButton(onClickAction = { }, isEnabled = true)
+        }
+    }
+}
+
+@Composable
+@Preview(name = "Light", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+fun KSSmallButtonsPreview() {
+    KSTheme {
+        Column {
+            KSSmallBlueButton(onClickAction = {}, text = "BLUE", isEnabled = true)
+
+            Spacer(modifier = Modifier.height(dimensions.listItemSpacingSmall))
+
+            KSSmallRedButton(onClickAction = {}, text = "RED", isEnabled = true)
+
+            Spacer(modifier = Modifier.height(dimensions.listItemSpacingSmall))
+
+            KSSmallWhiteButton(onClickAction = {}, text = "WHITE", isEnabled = true)
+        }
+    }
+}
+
+@Composable
+@Preview(name = "Light", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+fun KSSearchToolbarButtons() {
+    KSTheme {
+        KSSearchToolbarButtonsColumn()
+    }
+}
+
+@Composable
+fun KSSearchToolbarButtonsColumn() {
+    Column(
+        modifier = Modifier.background(color = colors.backgroundSurfacePrimary),
+    ) {
+        Row {
+            KSIconButton(onClick = {}, imageVector = Icons.Filled.Close)
+        }
+        Row {
+            KSIconPillButton(type = FilterRowPillType.SORT, isSelected = false)
+            KSIconPillButton(type = FilterRowPillType.SORT, isSelected = true)
+            KSIconPillButton(type = FilterRowPillType.FILTER, isSelected = true)
+            KSIconPillButton(type = FilterRowPillType.FILTER, isSelected = false)
+        }
+        Row {
+            KSIconPillButton(type = FilterRowPillType.SORT, isSelected = true, count = 3)
+            KSIconPillButton(type = FilterRowPillType.SORT, isSelected = false, count = 3)
+            KSIconPillButton(type = FilterRowPillType.FILTER, isSelected = true, count = 3)
+            KSIconPillButton(type = FilterRowPillType.FILTER, isSelected = false, count = 3)
+        }
+        Row {
+            KSPillButton(countApiIsReady = false, text = "Category", isSelected = false, count = 0, onClick = {})
+            KSPillButton(countApiIsReady = false, text = "Art", isSelected = true, count = 0, onClick = {})
+        }
+        Row {
+            KSPillButton(countApiIsReady = true, text = "Late Pledges", isSelected = false, count = 30, onClick = {}, shouldShowTrailingIcon = false)
+            KSPillButton(countApiIsReady = true, text = "Late Pledges", isSelected = true, count = 30, onClick = {}, shouldShowTrailingIcon = false)
+        }
+        Row {
+            KSPillButton(countApiIsReady = false, text = "Late Pledges", isSelected = true, count = 0, onClick = {}, shouldShowTrailingIcon = false)
+            KSPillButton(countApiIsReady = false, text = "Late Pledges", isSelected = false, count = 0, onClick = {}, shouldShowTrailingIcon = false)
+        }
+        Row {
+            KSPillButton(countApiIsReady = false, text = "Late Pledges", isSelected = true, count = 0, onClick = {}, shouldShowTrailingIcon = true)
+            KSPillButton(countApiIsReady = false, text = "Late Pledges", isSelected = false, count = 0, onClick = {}, shouldShowTrailingIcon = true)
+        }
+        Row {
+            KSPillButton(countApiIsReady = false, text = "Projects We Love", isSelected = true, count = 0, onClick = {}, shouldShowLeadingIcon = true)
+            KSPillButton(countApiIsReady = false, text = "Projects We Love", isSelected = false, count = 0, onClick = {}, shouldShowLeadingIcon = true)
+        }
+    }
+}
+
+@Composable
+@Preview(name = "Light", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+fun KSOutlinedButtons() {
+    KSTheme {
+        Column(
+            modifier = Modifier.background(color = colors.backgroundSurfacePrimary),
+        ) {
+            KSOutlinedButton(
+                backgroundColor = colors.backgroundSurfacePrimary,
+                textColor = colors.textPrimary,
+                onClickAction = {},
+                text = "OutlinedButton",
+                isEnabled = true
+            )
+
+            KSOutlinedButton(
+                backgroundColor = colors.backgroundSurfacePrimary,
+                textColor = colors.textPrimary,
+                onClickAction = {},
+                text = "OutlinedButton Disabled",
+                isEnabled = false
+            )
+        }
+    }
+}
+
+@Composable
+@Preview(name = "Light", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+fun KSPlayerControlButtonsPreview() {
+    KSTheme {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(32.dp),
+            modifier = Modifier.pointerInput(Unit) {} // Stops click propagation
+        ) {
+            KSControlIcon(
+                icon = Rewind,
+                size = 36.dp,
+                onClick = {
+                }
+            )
+
+            KSControlIcon(
+                icon = Play,
+                size = 62.dp,
+                onClick = {
+                }
+            )
+
+            KSControlIcon(
+                icon = Forward,
+                size = 36.dp,
+                onClick = {
+                }
+            )
+        }
+    }
+}
+
+@Composable
+@Preview(name = "Light", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+fun KSVideoPlayerButtonsPreview() {
+    KSTheme {
+        Column(
+            modifier = Modifier
+                .background(colors.backgroundSurfaceRaised.copy(alpha = 0.5f))
+                .padding(dimensions.paddingMedium),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(dimensions.paddingMedium)
+        ) {
+            KSProfileButton(
+                imageUrl = "https://www.kickstarter.com/assets/default/user_default-738555160848037617b84803d360098f99.png",
+                onClick = {}
+            )
+
+            KSVideoPlayerIconButton(
+                icon = Bookmark,
+                text = "1k",
+                onClick = {},
+                contentDescription = "Bookmark"
+            )
+
+            KSVideoPlayerIconButton(
+                icon = Share,
+                text = "50",
+                onClick = {},
+                contentDescription = "Share"
+            )
+
+            KSVideoPlayerIconButton(
+                icon = Ellipsis,
+                onClick = {},
+                contentDescription = "More options"
+            )
+        }
+    }
+}
+
+@Composable
+fun KSPrimaryGreenButton(
+    modifier: Modifier = Modifier,
+    leadingIcon: @Composable () -> Unit = {},
+    onClickAction: () -> Unit,
+    text: String,
+    textStyle: TextStyle = typographyV2.body,
+    isEnabled: Boolean
+) {
+    KSButton(
+        modifier = modifier,
+        leadingIcon = leadingIcon,
+        onClickAction = onClickAction,
+        isEnabled = isEnabled,
+        backgroundColor = colors.backgroundAccentGreenBold,
+        text = text,
+        textStyle = textStyle,
+        textColor = colors.textInversePrimary
+    )
+}
+
+@Composable
+fun KSPrimaryBlueButton(
+    modifier: Modifier = Modifier,
+    leadingIcon: @Composable () -> Unit = {},
+    onClickAction: () -> Unit,
+    text: String,
+    textStyle: TextStyle = typographyV2.body,
+    isEnabled: Boolean
+) {
+    KSButton(
+        modifier = modifier,
+        leadingIcon = leadingIcon,
+        onClickAction = onClickAction,
+        isEnabled = isEnabled,
+        backgroundColor = colors.backgroundAccentBlueBold,
+        text = text,
+        textStyle = textStyle,
+        textColor = colors.textInversePrimary
+    )
+}
+
+@Composable
+fun KSPrimaryBlackButton(
+    modifier: Modifier = Modifier,
+    leadingIcon: @Composable () -> Unit = {},
+    onClickAction: () -> Unit,
+    text: String,
+    textStyle: TextStyle = typographyV2.body,
+    isEnabled: Boolean
+) {
+    KSButton(
+        modifier = modifier,
+        leadingIcon = leadingIcon,
+        onClickAction = onClickAction,
+        isEnabled = isEnabled,
+        backgroundColor = colors.backgroundAction,
+        text = text,
+        textStyle = textStyle,
+        textColor = colors.textInversePrimary
+    )
+}
+
+@Composable
+fun KSSecondaryGreyButton(
+    modifier: Modifier = Modifier,
+    leadingIcon: @Composable () -> Unit = {},
+    onClickAction: () -> Unit,
+    text: String,
+    textStyle: TextStyle = typographyV2.body,
+    isEnabled: Boolean
+) {
+    KSButton(
+        modifier = modifier,
+        leadingIcon = leadingIcon,
+        onClickAction = onClickAction,
+        isEnabled = isEnabled,
+        backgroundColor = colors.backgroundAccentGrayBold,
+        text = text,
+        textStyle = textStyle,
+        textColor = colors.textPrimary
+    )
+}
+
+@Composable
+fun KSSecondaryRedButton(
+    modifier: Modifier = Modifier,
+    leadingIcon: @Composable () -> Unit = {},
+    onClickAction: () -> Unit,
+    text: String,
+    textStyle: TextStyle = typographyV2.body,
+    isEnabled: Boolean
+) {
+    KSButton(
+        modifier = modifier,
+        leadingIcon = leadingIcon,
+        onClickAction = onClickAction,
+        isEnabled = isEnabled,
+        backgroundColor = colors.backgroundDangerBold,
+        text = text,
+        textStyle = textStyle,
+        textColor = colors.textInversePrimary
+    )
+}
+
+@Composable
+fun KSSecondaryWhiteButton(
+    modifier: Modifier = Modifier,
+    leadingIcon: @Composable () -> Unit = {},
+    onClickAction: () -> Unit,
+    text: String,
+    textStyle: TextStyle = typographyV2.body,
+    isEnabled: Boolean
+) {
+    KSButton(
+        modifier = modifier,
+        leadingIcon = leadingIcon,
+        onClickAction = onClickAction,
+        isEnabled = isEnabled,
+        backgroundColor = colors.backgroundSurfacePrimary,
+        text = text,
+        textStyle = textStyle,
+        textColor = colors.textAccentGreenBold
+    )
+}
+
+@Composable
+fun KSFacebookButton(
+    modifier: Modifier = Modifier,
+    onClickAction: () -> Unit,
+    text: String,
+    isEnabled: Boolean
+) {
+    KSIconTextButton(
+        modifier = modifier,
+        onClickAction = onClickAction,
+        isEnabled = isEnabled,
+        backgroundColor = colors.facebook_blue,
+        imageId = R.drawable.com_facebook_button_icon,
+        text = text,
+        textColor = colors.kds_white
+    )
+}
+
+@Composable
+fun KSGooglePayButton(
+    modifier: Modifier = Modifier,
+    onClickAction: () -> Unit,
+    isEnabled: Boolean
+) {
+    KSIconTextButton(
+        modifier = modifier,
+        onClickAction = onClickAction,
+        isEnabled = isEnabled,
+        backgroundColor = colors.kds_black,
+        imageId = R.drawable.googlepay_button_content
+    )
+}
+
+@Composable
+fun KSIconTextButton(
+    modifier: Modifier = Modifier,
+    onClickAction: () -> Unit,
+    isEnabled: Boolean,
+    backgroundColor: Color,
+    imageId: Int,
+    imageContentDescription: String? = null,
+    text: String? = null,
+    textColor: Color? = null,
+) {
+    Button(
+        modifier = modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = dimensions.minButtonHeight),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = backgroundColor,
+            disabledContainerColor = colors.backgroundActionDisabled
+        ),
+        onClick = { onClickAction.invoke() },
+        elevation = ButtonDefaults.buttonElevation(),
+        enabled = isEnabled,
+        shape = shapes.medium
+    ) {
+        Row {
+            Image(
+                modifier = Modifier.defaultMinSize(
+                    minHeight = dimensions.imageSizeMedium,
+                    minWidth = dimensions.imageSizeMedium
+                ),
+                painter = painterResource(id = imageId),
+                contentDescription = imageContentDescription
+            )
+
+            safeLet(text, textColor) { copy, color ->
+                Spacer(modifier = Modifier.width(dimensions.listItemSpacingMediumSmall))
+
+                Text(
+                    text = copy,
+                    color = if (isEnabled) color else colors.textAccentGrey,
+                    style = typographyV2.body
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun KSSmallBlueButton(
+    modifier: Modifier = Modifier,
+    onClickAction: () -> Unit,
+    text: String,
+    isEnabled: Boolean,
+    radius: Dp? = null
+) {
+    KSSmallButton(
+        modifier = modifier,
+        onClickAction = onClickAction,
+        isEnabled = isEnabled,
+        backgroundColor = colors.backgroundAccentBlueBold,
+        text = text,
+        textColor = colors.textInversePrimary,
+        radius = radius
+    )
+}
+
+@Composable
+fun KSSmallRedButton(
+    modifier: Modifier = Modifier,
+    onClickAction: () -> Unit,
+    text: String,
+    isEnabled: Boolean,
+    radius: Dp? = null
+) {
+    KSSmallButton(
+        modifier = modifier,
+        onClickAction = onClickAction,
+        isEnabled = isEnabled,
+        backgroundColor = colors.backgroundDangerBold,
+        text = text,
+        textColor = colors.textInversePrimary,
+        radius = radius
+    )
+}
+
+@Composable
+fun KSSmallWhiteButton(
+    modifier: Modifier = Modifier,
+    onClickAction: () -> Unit,
+    text: String,
+    isEnabled: Boolean,
+    radius: Dp? = null
+) {
+    KSSmallButton(
+        modifier = modifier,
+        onClickAction = onClickAction,
+        isEnabled = isEnabled,
+        backgroundColor = colors.backgroundInverse,
+        text = text,
+        textColor = colors.textAccentGreenBold,
+        radius = radius
+    )
+}
+
+@Composable
+fun KSSmallButton(
+    modifier: Modifier = Modifier,
+    onClickAction: () -> Unit,
+    isEnabled: Boolean,
+    backgroundColor: Color,
+    text: String,
+    textColor: Color,
+    radius: Dp? = null
+) {
+    Button(
+        modifier = modifier,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = backgroundColor,
+            disabledContainerColor = colors.backgroundActionDisabled
+        ),
+        onClick = { onClickAction.invoke() },
+        elevation = ButtonDefaults.buttonElevation(),
+        enabled = isEnabled,
+        shape = radius?.let { RoundedCornerShape(radius) } ?: shapes.medium
+    ) {
+        Text(
+            text = text,
+            color = if (isEnabled) textColor else colors.textAccentGrey,
+            style = typographyV2.buttonLabel
+        )
+    }
+}
+
+@Composable
+fun KSIconButton(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {},
+    imageVector: ImageVector = Icons.Filled.Close,
+    enabled: Boolean = true,
+    contentDescription: String? = null
+) {
+    IconButton(
+        modifier = modifier,
+        onClick = onClick,
+        enabled = enabled,
+    ) {
+        Icon(imageVector = imageVector, contentDescription = contentDescription, tint = colors.icon)
+    }
+}
+
+@Composable
+fun KSIconPillButton(
+    modifier: Modifier = Modifier,
+    isSelected: Boolean,
+    onClick: () -> Unit = {},
+    type: FilterRowPillType,
+    count: Int = 0
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier
+            .width(if (count > 0) dimensions.iconPillButtonSizeLarge else dimensions.iconPillButtonSize)
+            .border(
+                if (isSelected) dimensions.strokeWidth else dimensions.borderThickness,
+                if (isSelected) colors.borderActive else colors.borderBold,
+                RoundedCornerShape(dimensions.pillButtonShapeSize)
+            )
+            .size(dimensions.iconPillButtonSize)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                painter = painterForFilterType(type),
+                contentDescription = descriptionForFilterType(type),
+                tint = colors.icon
+            )
+            if (count > 0) {
+                Spacer(Modifier.padding(start = dimensions.paddingXSmall))
+                KSCountBadge(count)
+            }
+        }
+    }
+}
+
+@Composable
+private fun descriptionForFilterType(type: FilterRowPillType): String {
+    return when (type) {
+        FilterRowPillType.SORT -> stringResource(R.string.Sort_by)
+        FilterRowPillType.FILTER -> stringResource(R.string.Filter)
+        else -> stringResource(R.string.Sort_by)
+    }
+}
+
+@Composable
+private fun painterForFilterType(type: FilterRowPillType): Painter {
+    return when (type) {
+        FilterRowPillType.SORT -> painterResource(id = R.drawable.ic_sort)
+        FilterRowPillType.FILTER -> painterResource(id = R.drawable.ic_filter)
+        else -> painterResource(id = R.drawable.ic_sort)
+    }
+}
+
+@Composable
+fun KSPillButton(
+    modifier: Modifier = Modifier,
+    countApiIsReady: Boolean = false,
+    text: String,
+    isSelected: Boolean = false,
+    count: Int = 0,
+    onClick: () -> Unit,
+    iconTrailing: ImageVector = Icons.Filled.KeyboardArrowDown,
+    shouldShowTrailingIcon: Boolean = false,
+    shouldShowLeadingIcon: Boolean = false
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = Color.Transparent,
+            contentColor = colors.textAccentGrey
+        ),
+        border = if (isSelected) BorderStroke(
+            dimensions.strokeWidth,
+            colors.borderActive
+        ) else BorderStroke(dimensions.borderThickness, colors.borderBold),
+        shape = RoundedCornerShape(dimensions.pillButtonShapeSize),
+        elevation = ButtonDefaults.buttonElevation(dimensions.none, dimensions.none, dimensions.none)
+    ) {
+        if (shouldShowLeadingIcon) {
+            Icon(
+                modifier = Modifier.padding(end = dimensions.paddingSmall),
+                contentDescription = null,
+                painter = painterResource(id = R.drawable.projectswelove),
+                tint = Color.Unspecified
+            )
+        }
+        Text(
+            modifier = Modifier.padding(end = dimensions.paddingSmall),
+            text = text,
+            style = typographyV2.buttonLabel,
+            color = colors.textAccentGrey
+        )
+        if (countApiIsReady && count > 0) {
+            KSCountBadge(count)
+        }
+        if (shouldShowTrailingIcon) {
+            Icon(
+                imageVector = iconTrailing,
+                contentDescription = text,
+                tint = colors.icon
+            )
+        }
+    }
+}
+
+@Composable
+fun KSOutlinedButton(
+    modifier: Modifier = Modifier,
+    onClickAction: () -> Unit,
+    backgroundColor: Color,
+    text: String,
+    textColor: Color = colors.textPrimary,
+    textStyle: TextStyle = typographyV2.buttonLabel,
+    contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
+    isEnabled: Boolean = true,
+) {
+    OutlinedButton(
+        modifier = modifier,
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = backgroundColor,
+            contentColor = textColor
+        ),
+        enabled = isEnabled,
+        border = BorderStroke(dimensions.borderThickness, colors.borderBold),
+        contentPadding = contentPadding,
+        onClick = { onClickAction.invoke() }
+    ) {
+        Text(
+            style = textStyle,
+            color = if (isEnabled) textColor else textColor.copy(alpha = 0.38f),
+            text = text
+        )
+    }
+}
+
+@Composable
+fun KSButton(
+    modifier: Modifier = Modifier,
+    leadingIcon: @Composable () -> Unit = {},
+    onClickAction: () -> Unit,
+    isEnabled: Boolean,
+    backgroundColor: Color,
+    text: String,
+    textStyle: TextStyle = typographyV2.body,
+    textColor: Color,
+    shape: RoundedCornerShape? = null,
+    shouldWrapContentWidth: Boolean = false
+) {
+    val mod = if (shouldWrapContentWidth)
+        modifier.wrapContentWidth()
+    else modifier.fillMaxWidth()
+    Button(
+        modifier = mod
+            .defaultMinSize(minHeight = dimensions.minButtonHeight),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = backgroundColor,
+            disabledContainerColor = colors.backgroundActionDisabled
+        ),
+        onClick = { onClickAction.invoke() },
+        elevation = ButtonDefaults.buttonElevation(),
+        enabled = isEnabled,
+        shape = shape ?: shapes.medium
+    ) {
+        leadingIcon()
+
+        Text(
+            text = text,
+            textAlign = TextAlign.Center,
+            color = if (isEnabled) textColor else colors.textSecondary,
+            style = textStyle
+        )
+    }
+}
+
+/**
+ * Glassmorphism-style icon button that blurs the content behind it.
+ *
+ * When [hazeState] is provided (from a parent [hazeSource]), the button uses a real
+ * background blur via the Haze library (API 31+, with tinted-overlay fallback on older devices).
+ * When [hazeState] is null, it falls back to a simple semi-transparent tinted overlay.
+ */
+@Composable
+fun KSControlIcon(
+    icon: ImageVector,
+    size: Dp,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    hazeState: HazeState? = null,
+    contentDescription: String? = null,
+    onClickLabel: String? = null
+) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .clickable(
+                onClick = onClick,
+                onClickLabel = onClickLabel,
+                role = Role.Button
+            )
+    ) {
+        val baseColor = colors.videoPlayer.background.copy(alpha = 0.25f)
+        val glassModifier = if (hazeState != null) {
+            Modifier
+                .matchParentSize()
+                .hazeEffect(state = hazeState) {
+                    blurRadius = 28.dp
+                    noiseFactor = 0.05f
+                    backgroundColor = baseColor
+                    tints = listOf(HazeTint(baseColor))
+                }
+        } else {
+            Modifier
+                .matchParentSize()
+                .background(colors.videoPlayer.background.copy(alpha = 0.25f))
+        }
+
+        Box(modifier = glassModifier)
+
+        // Border: #FFFFFF at 25%, 1.38px
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .border(
+                    width = 1.38.dp,
+                    color = colors.videoPlayer.content.copy(alpha = 0.25f),
+                    shape = CircleShape
+                )
+        )
+
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = colors.videoPlayer.content,
+        )
+    }
+}
+
+@Composable
+fun KSProfileButton(
+    imageUrl: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+    onClickLabel: String? = null
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+
+    Box(
+        modifier = modifier
+            .size(dimensions.videoPlayerIconSize)
+            .clip(CircleShape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+                onClickLabel = onClickLabel,
+                role = Role.Button
+            )
+    ) {
+        KSCircleImage(
+            url = imageUrl,
+            modifier = Modifier.fillMaxSize(),
+            contentDescription = contentDescription
+        )
+    }
+}
+
+@Composable
+fun KSVideoPlayerIconButton(
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    iconTint: Color = Color.Unspecified,
+    text: String? = null,
+    textIsDecorative: Boolean = false,
+    contentDescription: String? = null,
+    onClickLabel: String? = null
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick,
+                onClickLabel = onClickLabel,
+                role = Role.Button
+            )
+    ) {
+        Image(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            colorFilter = if (iconTint != Color.Unspecified) ColorFilter.tint(iconTint) else null,
+            modifier = Modifier
+                .size(dimensions.videoPlayerIconSize)
+                .dropShadow(
+                    shape = CircleShape,
+                    shadow = Shadow(
+                        radius = dimensions.videoPlayerShadowBlur,
+                        color = colors.videoPlayer.iconShadow,
+                        offset = DpOffset.Zero
+                    )
+                )
+        )
+        if (!text.isNullOrEmpty()) {
+            Spacer(modifier = Modifier.height(dimensions.paddingXSmall))
+            Text(
+                modifier = if (textIsDecorative) Modifier.clearAndSetSemantics { } else Modifier,
+                text = text,
+                color = colors.videoPlayer.content,
+                style = typographyV2.bodyBoldSM.copy(
+                    shadow = androidx.compose.ui.graphics.Shadow(
+                        color = colors.videoPlayer.iconShadow,
+                        offset = Offset(0f, 0f),
+                        blurRadius = dimensions.videoPlayerShadowBlur.value * 2f
+                    )
+                )
+            )
+        }
+    }
+}

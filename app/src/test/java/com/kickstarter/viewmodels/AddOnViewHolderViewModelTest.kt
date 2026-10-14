@@ -5,12 +5,14 @@ import androidx.annotation.NonNull
 import com.kickstarter.KSRobolectricTestCase
 import com.kickstarter.R
 import com.kickstarter.libs.Environment
+import com.kickstarter.libs.utils.extensions.addToDisposable
 import com.kickstarter.mock.factories.ProjectDataFactory
 import com.kickstarter.mock.factories.ProjectFactory
 import com.kickstarter.mock.factories.RewardFactory
 import com.kickstarter.models.RewardsItem
+import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.subscribers.TestSubscriber
 import org.junit.Test
-import rx.observers.TestSubscriber
 
 class AddOnViewHolderViewModelTest : KSRobolectricTestCase() {
     private lateinit var vm: AddOnViewHolderViewModel.ViewModel
@@ -25,19 +27,24 @@ class AddOnViewHolderViewModelTest : KSRobolectricTestCase() {
     private val titleForReward = TestSubscriber.create<String>()
     private val titleForNoReward = TestSubscriber.create<Int>()
     private val titleForAddOn = TestSubscriber.create<Pair<String, Int>>()
+    private val localPickUpIsGone = TestSubscriber.create<Boolean>()
+    private val localPickUpName = TestSubscriber.create<String>()
+    private val disposables = CompositeDisposable()
 
     private fun setUpEnvironment(@NonNull environment: Environment) {
         this.vm = AddOnViewHolderViewModel.ViewModel(environment)
-        this.vm.outputs.isAddonTitleGone().subscribe(this.quantityIsGone)
-        this.vm.outputs.conversion().subscribe(this.conversion)
-        this.vm.outputs.conversionIsGone().subscribe(this.conversionIsGone)
-        this.vm.outputs.descriptionForNoReward().subscribe(this.descriptionForNoReward)
-        this.vm.outputs.descriptionForReward().subscribe(this.descriptionForReward)
-        this.vm.outputs.rewardItems().subscribe(this.rewardItems)
-        this.vm.outputs.rewardItemsAreGone().subscribe(this.rewardItemsAreGone)
-        this.vm.outputs.titleForNoReward().subscribe(this.titleForNoReward)
-        this.vm.outputs.titleForReward().subscribe(this.titleForReward)
-        this.vm.outputs.titleForAddOn().subscribe(this.titleForAddOn)
+        this.vm.outputs.isAddonTitleGone().subscribe { this.quantityIsGone.onNext(it) }.addToDisposable(disposables)
+        this.vm.outputs.conversion().subscribe { this.conversion.onNext(it) }.addToDisposable(disposables)
+        this.vm.outputs.conversionIsGone().subscribe { this.conversionIsGone.onNext(it) }.addToDisposable(disposables)
+        this.vm.outputs.descriptionForNoReward().subscribe { this.descriptionForNoReward.onNext(it) }.addToDisposable(disposables)
+        this.vm.outputs.descriptionForReward().subscribe { this.descriptionForReward.onNext(it) }.addToDisposable(disposables)
+        this.vm.outputs.rewardItems().subscribe { this.rewardItems.onNext(it) }.addToDisposable(disposables)
+        this.vm.outputs.rewardItemsAreGone().subscribe { this.rewardItemsAreGone.onNext(it) }.addToDisposable(disposables)
+        this.vm.outputs.titleForNoReward().subscribe { this.titleForNoReward.onNext(it) }.addToDisposable(disposables)
+        this.vm.outputs.titleForReward().subscribe { this.titleForReward.onNext(it) }.addToDisposable(disposables)
+        this.vm.outputs.titleForAddOn().subscribe { this.titleForAddOn.onNext(it) }.addToDisposable(disposables)
+        this.vm.outputs.localPickUpIsGone().subscribe { this.localPickUpIsGone.onNext(it) }.addToDisposable(disposables)
+        this.vm.outputs.localPickUpName().subscribe { this.localPickUpName.onNext(it) }.addToDisposable(disposables)
     }
 
     @Test
@@ -91,19 +98,49 @@ class AddOnViewHolderViewModelTest : KSRobolectricTestCase() {
         setUpEnvironment(environment)
 
         val usProject = ProjectFactory.project()
-                .toBuilder()
-                .currentCurrency("USD")
-                .build()
+            .toBuilder()
+            .currentCurrency("USD")
+            .build()
         val minimum = 50.0
         val reward = RewardFactory.reward()
-                .toBuilder()
-                .minimum(minimum)
-                .convertedMinimum(minimum)
-                .build()
+            .toBuilder()
+            .minimum(minimum)
+            .convertedMinimum(minimum)
+            .build()
 
         this.vm.inputs.configureWith(ProjectDataFactory.project(usProject), reward)
 
         this.conversionIsGone.assertValue(true)
         this.conversion.assertValue("$50")
+    }
+
+    @Test
+    fun testReward_LocalReceiptGroup_Visible() {
+        val env = environment()
+            .toBuilder()
+            .build()
+        setUpEnvironment(env)
+
+        val project = ProjectFactory.project()
+        val reward = RewardFactory.localReceiptLocation()
+        this.vm.inputs.configureWith(ProjectDataFactory.project(project), reward)
+
+        this.localPickUpName.assertValue(reward.localReceiptLocation()?.displayableName())
+        this.localPickUpIsGone.assertValue(false)
+    }
+
+    @Test
+    fun testReward_LocalReceiptGroup_Visible_When_RewardNotLocal() {
+        val env = environment()
+            .toBuilder()
+            .build()
+        setUpEnvironment(env)
+
+        val project = ProjectFactory.project()
+        val reward = RewardFactory.rewardWithShipping()
+        this.vm.inputs.configureWith(ProjectDataFactory.project(project), reward)
+
+        this.localPickUpName.assertNoValues()
+        this.localPickUpIsGone.assertNoValues()
     }
 }

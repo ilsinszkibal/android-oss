@@ -1,3 +1,208 @@
+# Fragment used to load the minimal project data required for the Video Feed
+fragment videoFeedProject on Project {
+    id
+    pid
+    name
+    slug
+    percentFunded
+    deadlineAt
+    launchedAt
+    backersCount
+    watchesCount
+    sharesCount
+    isWatched
+    imageUrl(blur: false, width: 1024)
+    url
+    pledged {
+        ...amount
+    }
+    creator {
+        name
+        imageUrl(blur: false, width: 200)
+    }
+    category {
+        name
+    }
+    verticalVideo {
+        id
+        previewImageUrl
+        videoSources {
+            hls {
+                src
+            }
+        }
+    }
+}
+
+# Fragment used to load the Project Card information on Discovery
+fragment projectCard on Project {
+    backersCount
+    description
+    isLaunched
+    isPledgeOverTimeAllowed
+    backing {
+        id
+    }
+    category {
+        ...category
+    }
+    country {
+        ...country
+    }
+    createdAt
+    creator {
+        ... user
+    }
+    prelaunchActivated
+    projectNotice
+    projectOfTheDayAt
+    friends(first:3) {
+        nodes {
+            ... user
+        }
+    }
+    fxRate
+    deadlineAt
+    goal {
+        ... amount
+    }
+    pledged {
+        ... amount
+    }
+    id
+    isWatched
+    launchedAt
+    location {
+        ... location
+    }
+    name
+    ...full
+    prelaunchActivated
+    slug
+    isProjectWeLove
+    state
+    stateChangedAt
+    url
+    watchesCount
+    isInPostCampaignPledgingPhase
+    postCampaignPledgingEnabled
+    pledgeOverTimeCollectionPlanChargeExplanation
+    pledgeOverTimeCollectionPlanChargedAsNPayments
+    pledgeOverTimeCollectionPlanShortPitch
+    video {
+        ...video
+    }
+}
+
+# Fragment used to load all the Project information on Project Page
+fragment fullProject on Project {
+    availableCardTypes
+    backersCount
+    description
+    minPledge
+    pledgeOverTimeMinimumExplanation
+    isLaunched
+    isPledgeOverTimeAllowed
+    sendMetaCapiEvents
+    sendThirdPartyEvents
+    backing {
+        ... backing
+    }
+    category {
+        ...category
+    }
+    commentsCount(withReplies:true)
+    country {
+        ...country
+    }
+    createdAt
+    creator {
+        ... user
+    }
+    flagging {
+        kind
+    }
+    currency
+    canComment
+    pledgeManager {
+        ... pledgeManager
+    }
+    prelaunchActivated
+    projectNotice
+    projectOfTheDayAt
+    friends {
+        nodes {
+            ... user
+        }
+    }
+    fxRate
+    deadlineAt
+    goal {
+        ... amount
+    }
+    id
+    isWatched
+    lastWave {
+        ...lastWave
+    }
+    launchedAt
+    location {
+        ... location
+    }
+    name
+    collaboratorPermissions
+    pledged {
+        ... amount
+    }
+    ...full
+    prelaunchActivated
+    ...tagsCreative
+    ...tagsDiscovery
+    redemptionPageUrl
+    rewards { # query within project the bare minimum for rewards
+        nodes {
+            ... reward
+        }
+    }
+    risks
+    story
+    slug
+    isProjectWeLove
+    state
+    stateChangedAt
+    usdExchangeRate
+    posts {
+        ...updates
+    }
+    url
+    video {
+        ...video
+    }
+
+    # - Frequently asked questions
+    faqs {
+        nodes {
+            ... faq
+        }
+    }
+
+    # - Artificial Intelligence Disclosure
+    aiDisclosure {
+        ... aiDisclosure
+    }
+
+    environmentalCommitments {
+        ... environmentalCommitment
+    }
+    watchesCount
+    sharesCount
+    isInPostCampaignPledgingPhase
+    postCampaignPledgingEnabled
+    pledgeOverTimeCollectionPlanChargeExplanation
+    pledgeOverTimeCollectionPlanChargedAsNPayments
+    pledgeOverTimeCollectionPlanShortPitch
+}
+
 fragment backing on Backing {
     id
     status
@@ -5,6 +210,9 @@ fragment backing on Backing {
     cancelable
     pledgedOn
     backerCompleted
+    backingDetailsPageRoute(type: url, tab: survey_responses)
+    isPostCampaign
+    incremental
     project {
         ... project
     }
@@ -18,13 +226,20 @@ fragment backing on Backing {
         ... amount
     }
     paymentSource {
-        ... payment
+        ... paymentSourceFragment
+    }
+    paymentIncrements {
+        ...paymentIncrement
     }
     shippingAmount {
         ... amount
     }
     reward {
         ... reward
+        items {
+            ... rewardItems
+        }
+        ...rewardImage
     }
     backer {
         ... user
@@ -32,8 +247,96 @@ fragment backing on Backing {
     addOns {
         nodes {
             ... reward
+            items {
+                ... rewardItems
+            }
+            ...rewardImage
         }
     }
+    order {
+        ... order
+    }
+}
+
+fragment rewardItems on RewardItemsConnection {
+    edges {
+        quantity
+        node {
+            id
+            name
+        }
+    }
+}
+
+fragment full on Project {
+    image {
+        url(width: 1024)
+        altText
+    }
+}
+
+fragment rewardImage on Reward {
+    image {
+        url(width: $rewardImageWidth)
+        altText
+    }
+}
+
+fragment video on Video {
+    previewImageUrl
+    videoSources {
+        base {
+            src
+        }
+        high {
+            src
+        }
+        hls {
+            src
+        }
+    }
+}
+
+fragment tagsDiscovery on Project {
+    tags(scope: CREATIVE_PROMPT) {
+        id
+    }
+}
+
+fragment tagsCreative on Project {
+    tags(scope: CREATIVE_PROMPT) {
+        id
+    }
+}
+
+fragment updates on PostConnection {
+    nodes {
+        updatedAt
+    }
+    totalCount
+}
+
+
+fragment category on Category {
+    analyticsName
+    id
+    name
+    slug
+    totalProjectCount
+    url
+    parentCategory {
+        analyticsName
+        id
+        name
+        slug
+        totalProjectCount
+        url
+    }
+}
+
+fragment country on Country {
+    code
+    name
 }
 
 fragment checkoutBacking on Backing {
@@ -47,6 +350,17 @@ fragment project on Project {
     slug
 }
 
+fragment similarProject on Project {
+    id
+    pid
+    name
+    slug
+    isLaunched
+    deadlineAt
+    percentFunded
+    imageUrl(width: $imageUrlWidth)
+}
+
 fragment reward on Reward {
     id
     name
@@ -54,21 +368,16 @@ fragment reward on Reward {
     description
     estimatedDeliveryOn
     available
-    items {
-        edges {
-            quantity
-            node {
-                project{
-                    id
-                }
-                hasBackers
-                id
-                name
-                rewardsCount
-            }
-        }
+    audienceData {
+        secret
     }
     amount {
+        ... amount
+    }
+    pledgeAmount {
+        ... amount
+    }
+    latePledgeAmount {
         ... amount
     }
     convertedAmount{
@@ -81,6 +390,56 @@ fragment reward on Reward {
     startsAt
     endsAt
     rewardType
+    featured
+    allowedAddons {
+        nodes {
+            id
+        }
+    }
+    localReceiptLocation {
+        ... location
+    }
+}
+
+fragment aiDisclosure on AiDisclosure {
+    fundingForAiAttribution
+    fundingForAiConsent
+    fundingForAiOption
+    generatedByAiConsent
+    generatedByAiDetails
+    id
+    otherAiDetails
+}
+
+fragment environmentalCommitment on EnvironmentalCommitment {
+    commitmentCategory
+    description
+    id
+}
+
+fragment faq on ProjectFaq {
+    id
+    answer
+    createdAt
+    question
+}
+
+fragment comment on Comment {
+    id
+    authorBadges
+    author {
+       ...user
+    }
+    body
+    deleted
+    hasFlaggings
+    sustained
+    parentId
+    authorCanceledPledge
+    replies {
+        totalCount
+    }
+    createdAt
 }
 
 fragment shippingRule on ShippingRule {
@@ -90,30 +449,184 @@ fragment shippingRule on ShippingRule {
     location {
         ... location
     }
+    estimatedMin {
+        amount
+    }
+    estimatedMax {
+        amount
+    }
+}
+
+
+
+fragment ppoCard on Backing {
+    id
+    backingDetailsPageRoute(type: url, tab: survey_responses)
+    clientSecret
+    amount {
+        ...amount
+    }
+    reward {
+        shippingPreference
+        id
+    }
+    backerCompleted
+    deliveryAddress {
+        id
+        addressLine1
+        addressLine2
+        city
+        region
+        postalCode
+        phoneNumber
+        recipientName
+        countryCode
+    }
+    project {
+        name
+        id
+        slug
+        backerSurvey {
+            id
+        }
+        ...full
+        creator {
+            name
+            id
+        }
+    }
 }
 
 fragment user on User {
     name
     id
-    imageUrl(blur: false, width: 54)
+    imageUrl(blur: false, width: 54),
+    isCreator
+    chosenCurrency
 }
 
 fragment amount on Money {
     amount
     currency
+    symbol
+}
+
+fragment paymentIncrementAmount on PaymentIncrementAmount {
+    amountAsCents
+    amountAsFloat
+    amountFormattedInProjectNativeCurrency
+    amountFormattedInProjectNativeCurrencyWithCurrencyCode
+    currency
+}
+
+fragment paymentIncrementBadge on PaymentIncrementBadge {
+    copy
+    variant
 }
 
 fragment location on Location {
-    county
     displayableName
+    country
     id
     name
 }
 
-fragment payment on CreditCard {
+fragment pageInfo on PageInfo {
+      hasPreviousPage
+      hasNextPage
+      startCursor
+      endCursor
+}
+
+fragment paymentSourceFragment on PaymentSource {
+    ... on CreditCard {
+        id
+        lastFour
+        expirationDate
+        type
+        state
+        stripeCardId
+    }
+    ... on BankAccount {
+        id
+        lastFour
+        bankName
+    }
+}
+
+fragment freeformPost on FreeformPost {
+    comments (first: $limit, after: $cursor) {
+        edges {
+            cursor
+            node {
+                ...comment
+            }
+        }
+        pageInfo {
+            ...pageInfo
+        }
+        totalCount
+    }
+}
+
+fragment post on Postable {
     id
-    lastFour
-    expirationDate
-    type
+    project {
+        id
+        url
+    }
+    author {
+        ...user
+    }
+    authorRole
+    isLiked
+    title
+    number
+    isPublic
+    isVisible
+    publishedAt
+    updatedAt
+    likesCount
+    ...updateFreeformPost
+}
+
+fragment updateFreeformPost on FreeformPost {
+    commentsCount(withReplies:true)
+    body
+}
+
+fragment paymentIncrement on PaymentIncrement {
+    id
+    amount {
+        ...paymentIncrementAmount
+    }
+    badge {
+        ...paymentIncrementBadge
+    }
     state
+    stateReason
+    scheduledCollection
+    refundedAmount  {
+        ...paymentIncrementAmount
+    }
+    refundUpdatedAmountInProjectNativeCurrency
+}
+
+fragment order on Order {
+    id
+    checkoutState
+    currency
+    total
+}
+
+fragment pledgeManager on PledgeManager {
+    id
+    acceptsNewBackers
+    optedOut
+    state
+}
+
+fragment lastWave on CheckoutWave {
+    id
+    active
 }

@@ -81,15 +81,93 @@
 
   </LinearLayout>
 
-  <TextView
-    android:id="@+id/drawer_dashboard"
-    style="@style/DrawerTextView"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:text="@string/tabbar_dashboard"
-    android:visibility="gone"
-    tools:visibility="visible"
-    app:drawableStartCompat="@drawable/ic_dashboard" />
+
+  <LinearLayout
+      android:id="@+id/drawer_project_alerts"
+      style="@style/DrawerCountContainer"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:contentDescription="@string/tabbar_activity"
+      android:orientation="horizontal"
+      android:visibility="gone">
+
+    <TextView
+        android:id="@+id/pledged_projects_overview"
+        style="@style/DrawerTextViewWithCount"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/Project_alerts"
+        app:drawableStartCompat="@drawable/ic_notification_bell" />
+
+    <TextView
+        android:id="@+id/beta_tag"
+        style="@style/RewardPill"
+        android:padding="@dimen/grid_1"
+        android:layout_gravity="center"
+        android:textSize="@dimen/badge_superbacker"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAllCaps="true"
+        android:text="@string/Beta" />
+
+    <View
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_height="0dp" />
+
+    <ImageView
+        android:id="@+id/project_alerts_indicator"
+        android:layout_marginEnd="@dimen/grid_3_half"
+        android:gravity="center_vertical"
+        android:layout_gravity="center"
+        android:layout_width="@dimen/grid_1"
+        android:layout_height="@dimen/grid_1"
+        android:contentDescription="@string/Project_alerts"
+        android:visibility="gone"/>
+
+  </LinearLayout>
+
+  <LinearLayout
+      android:id="@+id/drawer_backings"
+      style="@style/DrawerCountContainer"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:contentDescription="@string/tabbar_activity"
+      android:orientation="horizontal"
+      android:visibility="gone">
+
+    <TextView
+        android:id="@+id/backings"
+        style="@style/DrawerTextViewWithCount"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/Backings"
+        app:drawableStartCompat="@drawable/ic_rectangle_stack" />
+
+    <TextView
+        android:id="@+id/backings_beta_tag"
+        style="@style/RewardPill"
+        android:padding="@dimen/grid_1"
+        android:layout_gravity="center"
+        android:textSize="@dimen/badge_superbacker"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAllCaps="true"
+        android:text="@string/Beta" />
+
+    <View
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_height="0dp" />
+
+    <TextView
+        android:id="@+id/backing_action_count"
+        style="@style/DrawerCountTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        tools:text="2000" />
+
+  </LinearLayout>
 
   <LinearLayout
     android:id="@+id/drawer_activity"

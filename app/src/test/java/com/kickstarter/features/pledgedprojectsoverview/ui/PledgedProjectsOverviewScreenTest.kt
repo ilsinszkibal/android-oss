@@ -1,0 +1,249 @@
+package com.kickstarter.features.pledgedprojectsoverview.ui
+
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.isDisplayed
+import androidx.compose.ui.test.isNotDisplayed
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.paging.PagingData
+import androidx.paging.compose.collectAsLazyPagingItems
+import com.kickstarter.KSRobolectricTestCase
+import com.kickstarter.features.pledgedprojectsoverview.data.PPOCardFactory
+import com.kickstarter.ui.compose.designsystem.KSTheme
+import kotlinx.coroutines.flow.flowOf
+import org.junit.Test
+
+class
+PledgedProjectsOverviewScreenTest : KSRobolectricTestCase() {
+
+    private val backButton =
+        composeTestRule.onNodeWithTag(PledgedProjectsOverviewScreenTestTag.BACK_BUTTON.name)
+    private val infoButton =
+        composeTestRule.onNodeWithTag(PledgedProjectsOverviewScreenTestTag.INFO_BUTTON.name)
+    private val bottomSheet =
+        composeTestRule.onNodeWithTag(PledgedProjectsOverviewScreenTestTag.BOTTOM_SHEET.name)
+    private val alertCount =
+        composeTestRule.onNodeWithTag(PledgedProjectsOverviewScreenTestTag.ALERT_COUNT.name)
+    @Test
+    fun testBackButtonClick() {
+        var backClickedCount = 0
+        composeTestRule.setContent {
+            val ppoCardList = (0..10).map {
+                PPOCardFactory.confirmAddressCard()
+            }
+            val ppoCardPagingList = flowOf(PagingData.from(ppoCardList)).collectAsLazyPagingItems()
+
+            KSTheme {
+                PledgedProjectsOverviewScreen(
+                    modifier = Modifier,
+                    onBackPressed = { backClickedCount++ },
+                    lazyColumnListState = rememberLazyListState(),
+                    ppoCards = ppoCardPagingList,
+                    errorSnackBarHostState = SnackbarHostState(),
+                    onSendMessageClick = { _, _, _, _, _ -> },
+                    onAddressConfirmed = { _, _ -> },
+                    onRewardReceivedChanged = { _, _ -> },
+                    onProjectPledgeSummaryClick = { _ -> },
+                    onSeeAllBackedProjectsClick = {},
+                    onPrimaryActionButtonClicked = {},
+                    onSecondaryActionButtonClicked = {}
+                )
+            }
+        }
+
+        backButton.performClick()
+        assertEquals(1, backClickedCount)
+    }
+
+    @Test
+    fun `when v2 feature flag enabled, info button should appear and open bottom sheet`() {
+        composeTestRule.setContent {
+            val ppoCardList = (0..10).map {
+                PPOCardFactory.confirmAddressCard()
+            }
+            val ppoCardPagingList = flowOf(PagingData.from(ppoCardList)).collectAsLazyPagingItems()
+
+            KSTheme {
+                PledgedProjectsOverviewScreen(
+                    modifier = Modifier,
+                    onBackPressed = { },
+                    lazyColumnListState = rememberLazyListState(),
+                    ppoCards = ppoCardPagingList,
+                    errorSnackBarHostState = SnackbarHostState(),
+                    onSendMessageClick = { _, _, _, _, _ -> },
+                    onAddressConfirmed = { _, _ -> },
+                    onRewardReceivedChanged = { _, _ -> },
+                    onProjectPledgeSummaryClick = { _ -> },
+                    onSeeAllBackedProjectsClick = {},
+                    onPrimaryActionButtonClicked = {},
+                    onSecondaryActionButtonClicked = {},
+                    v2Enabled = true
+                )
+            }
+        }
+
+        infoButton.isDisplayed()
+        infoButton.performClick()
+        bottomSheet.isDisplayed()
+        infoButton.performClick()
+        bottomSheet.isNotDisplayed()
+    }
+
+    @Test
+    fun `when v2 feature flag off, should not show info button`() {
+        composeTestRule.setContent {
+            val ppoCardList = (0..10).map {
+                PPOCardFactory.confirmAddressCard()
+            }
+            val ppoCardPagingList = flowOf(PagingData.from(ppoCardList)).collectAsLazyPagingItems()
+
+            KSTheme {
+                PledgedProjectsOverviewScreen(
+                    modifier = Modifier,
+                    onBackPressed = { },
+                    lazyColumnListState = rememberLazyListState(),
+                    ppoCards = ppoCardPagingList,
+                    errorSnackBarHostState = SnackbarHostState(),
+                    onSendMessageClick = { _, _, _, _, _ -> },
+                    onAddressConfirmed = { _, _ -> },
+                    onRewardReceivedChanged = { _, _ -> },
+                    onProjectPledgeSummaryClick = { _ -> },
+                    onSeeAllBackedProjectsClick = {},
+                    onPrimaryActionButtonClicked = {},
+                    onSecondaryActionButtonClicked = {},
+                    v2Enabled = false
+                )
+            }
+        }
+
+        infoButton.assertDoesNotExist()
+    }
+
+    @Test
+    fun `when total alert count 0, should not show alert count in header`() {
+        composeTestRule.setContent {
+            val ppoCardList = (0..10).map {
+                PPOCardFactory.confirmAddressCard()
+            }
+            val ppoCardPagingList = flowOf(PagingData.from(ppoCardList)).collectAsLazyPagingItems()
+
+            KSTheme {
+                PledgedProjectsOverviewScreen(
+                    modifier = Modifier,
+                    onBackPressed = { },
+                    lazyColumnListState = rememberLazyListState(),
+                    ppoCards = ppoCardPagingList,
+                    errorSnackBarHostState = SnackbarHostState(),
+                    onSendMessageClick = { _, _, _, _, _ -> },
+                    onAddressConfirmed = { _, _ -> },
+                    onRewardReceivedChanged = { _, _ -> },
+                    onProjectPledgeSummaryClick = { _ -> },
+                    onSeeAllBackedProjectsClick = {},
+                    onPrimaryActionButtonClicked = {},
+                    onSecondaryActionButtonClicked = {},
+                    totalAlerts = 0,
+                    v2Enabled = false
+                )
+            }
+        }
+
+        alertCount.assertDoesNotExist()
+    }
+
+    @Test
+    fun `when total alert count more than 0, should show alert count in header`() {
+        composeTestRule.setContent {
+            val ppoCardList = (0..10).map {
+                PPOCardFactory.confirmAddressCard()
+            }
+            val ppoCardPagingList = flowOf(PagingData.from(ppoCardList)).collectAsLazyPagingItems()
+
+            KSTheme {
+                PledgedProjectsOverviewScreen(
+                    modifier = Modifier,
+                    onBackPressed = { },
+                    lazyColumnListState = rememberLazyListState(),
+                    ppoCards = ppoCardPagingList,
+                    errorSnackBarHostState = SnackbarHostState(),
+                    onSendMessageClick = { _, _, _, _, _ -> },
+                    onAddressConfirmed = { _, _ -> },
+                    onRewardReceivedChanged = { _, _ -> },
+                    onProjectPledgeSummaryClick = { _ -> },
+                    onSeeAllBackedProjectsClick = {},
+                    onPrimaryActionButtonClicked = {},
+                    onSecondaryActionButtonClicked = {},
+                    totalAlerts = 10,
+                    v2Enabled = false
+                )
+            }
+        }
+
+        alertCount.assertExists()
+        alertCount.assertIsDisplayed()
+    }
+
+    @Test
+    fun `Test BottomSheet layout is not added to composition hierarchy on initial state`() {
+        composeTestRule.setContent {
+            val ppoCardList = (0..10).map {
+                PPOCardFactory.confirmAddressCard()
+            }
+            val ppoCardPagingList = flowOf(PagingData.from(ppoCardList)).collectAsLazyPagingItems()
+
+            KSTheme {
+                PledgedProjectsOverviewScreen(
+                    modifier = Modifier,
+                    onBackPressed = {},
+                    lazyColumnListState = rememberLazyListState(),
+                    ppoCards = ppoCardPagingList,
+                    errorSnackBarHostState = SnackbarHostState(),
+                    onSendMessageClick = { _, _, _, _, _ -> },
+                    onAddressConfirmed = { _, _ -> },
+                    onRewardReceivedChanged = { _, _ -> },
+                    onProjectPledgeSummaryClick = { _ -> },
+                    onSeeAllBackedProjectsClick = {},
+                    onPrimaryActionButtonClicked = {},
+                    onSecondaryActionButtonClicked = {},
+                    v2Enabled = true
+                )
+            }
+        }
+
+        bottomSheet.assertDoesNotExist()
+    }
+
+    @Test
+    fun `Test BottomSheet layout is added to compose hierarchy when info button clicked`() {
+        composeTestRule.setContent {
+            val ppoCardList = (0..10).map {
+                PPOCardFactory.confirmAddressCard()
+            }
+            val ppoCardPagingList = flowOf(PagingData.from(ppoCardList)).collectAsLazyPagingItems()
+
+            KSTheme {
+                PledgedProjectsOverviewScreen(
+                    modifier = Modifier,
+                    onBackPressed = {},
+                    lazyColumnListState = rememberLazyListState(),
+                    ppoCards = ppoCardPagingList,
+                    errorSnackBarHostState = SnackbarHostState(),
+                    onSendMessageClick = { _, _, _, _, _ -> },
+                    onAddressConfirmed = { _, _ -> },
+                    onRewardReceivedChanged = { _, _ -> },
+                    onProjectPledgeSummaryClick = { _ -> },
+                    onSeeAllBackedProjectsClick = {},
+                    onPrimaryActionButtonClicked = {},
+                    onSecondaryActionButtonClicked = {},
+                    v2Enabled = true
+                )
+            }
+        }
+        infoButton.assertIsDisplayed()
+        infoButton.performClick()
+        composeTestRule.waitForIdle()
+        bottomSheet.assertIsDisplayed()
+    }
+}

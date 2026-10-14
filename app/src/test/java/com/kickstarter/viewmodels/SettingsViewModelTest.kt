@@ -1,38 +1,50 @@
 package com.kickstarter.viewmodels
 
 import com.kickstarter.KSRobolectricTestCase
-import com.kickstarter.libs.*
-import com.kickstarter.mock.MockCurrentConfig
-import com.kickstarter.mock.MockExperimentsClientType
+import com.kickstarter.libs.AnalyticEvents
+import com.kickstarter.libs.Environment
+import com.kickstarter.libs.MockCurrentUserV2
+import com.kickstarter.libs.MockTrackingClient
+import com.kickstarter.libs.TrackingClientType
+import com.kickstarter.libs.utils.extensions.addToDisposable
+import com.kickstarter.mock.MockCurrentConfigV2
 import com.kickstarter.mock.factories.UserFactory
 import com.kickstarter.models.User
+import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.subscribers.TestSubscriber
 import org.junit.Test
-import rx.observers.TestSubscriber
 
 class SettingsViewModelTest : KSRobolectricTestCase() {
 
-    private lateinit var vm: SettingsViewModel.ViewModel
+    private lateinit var vm: SettingsViewModel.SettingsViewModel
     private val currentUserTest = TestSubscriber<User>()
-    private val logout = TestSubscriber<Void>()
+    private val logout = TestSubscriber<Unit>()
     private val showConfirmLogoutPrompt = TestSubscriber<Boolean>()
-    private val userId = TestSubscriber<Long?>()
+    private val currentUser = TestSubscriber<User?>()
+
+    private val disposables = CompositeDisposable()
 
     private fun setUpEnvironment(user: User) {
-        val currentUser = MockCurrentUser(user)
+        val currentUser = MockCurrentUserV2(user)
         val environment = environment().toBuilder()
-                .currentUser(currentUser)
-                .analytics(AnalyticEvents(listOf(getMockClientWithUser(user))))
-                .build()
+            .currentUserV2(currentUser)
+            .analytics(AnalyticEvents(listOf(getMockClientWithUser(user))))
+            .build()
 
         setUpEnvironment(environment)
-        currentUser.observable().subscribe(this.currentUserTest)
+        currentUser.observable().subscribe {
+            it.getValue()?.let { user ->
+                this.currentUserTest.onNext(user)
+            }
+        }.addToDisposable(disposables)
     }
 
     private fun setUpEnvironment(environment: Environment) {
 
-        this.vm = SettingsViewModel.ViewModel(environment)
-        this.vm.outputs.logout().subscribe(this.logout)
-        this.vm.outputs.showConfirmLogoutPrompt().subscribe(this.showConfirmLogoutPrompt)
+        this.vm = SettingsViewModel.SettingsViewModel(environment)
+        this.vm.outputs.logout().subscribe { this.logout.onNext(Unit) }.addToDisposable(disposables)
+        this.vm.outputs.showConfirmLogoutPrompt()
+            .subscribe { this.showConfirmLogoutPrompt.onNext(it) }.addToDisposable(disposables)
     }
 
     @Test
@@ -54,7 +66,11 @@ class SettingsViewModelTest : KSRobolectricTestCase() {
         setUpEnvironment(user)
 
         this.currentUserTest.assertValues(user)
-        this.vm.outputs.showConfirmLogoutPrompt().subscribe(showConfirmLogoutPrompt)
+        this.vm.outputs.showConfirmLogoutPrompt()
+            .subscribe {
+                showConfirmLogoutPrompt.onNext(it)
+            }
+            .addToDisposable(disposables)
     }
 
     @Test
@@ -76,16 +92,16 @@ class SettingsViewModelTest : KSRobolectricTestCase() {
         setUpEnvironment(user)
 
         this.vm.inputs.confirmLogoutClicked()
-        this.logout.assertValue(null)
+        this.logout.assertValue(Unit)
 
-        this.userId.assertValues(user.id(), null)
+        this.currentUser.assertNoValues()
     }
 
     private fun getMockClientWithUser(user: User) = MockTrackingClient(
-            MockCurrentUser(user),
-            MockCurrentConfig(),
-            TrackingClientType.Type.SEGMENT,
-            MockExperimentsClientType()).apply {
-        this.identifiedId.subscribe(userId)
+        MockCurrentUserV2(user),
+        MockCurrentConfigV2(),
+        TrackingClientType.Type.SEGMENT
+    ).apply {
+        this.identifiedUser.subscribe { currentUser }
     }
 }

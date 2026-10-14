@@ -2,91 +2,138 @@ package com.kickstarter.ui.viewholders
 
 import android.util.Pair
 import android.view.View
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.core.view.isGone
 import androidx.recyclerview.widget.LinearLayoutManager
+import coil.load
+import coil.size.Precision
 import com.kickstarter.R
-import com.kickstarter.libs.rx.transformers.Transformers.observeForUI
+import com.kickstarter.databinding.ItemAddOnBinding
+import com.kickstarter.libs.rx.transformers.Transformers.observeForUIV2
 import com.kickstarter.libs.utils.RewardViewUtils
 import com.kickstarter.libs.utils.ViewUtils
+import com.kickstarter.libs.utils.extensions.addToDisposable
 import com.kickstarter.models.Reward
 import com.kickstarter.ui.adapters.RewardItemsAdapter
+import com.kickstarter.ui.compose.designsystem.KSFeaturedRewardBadge
+import com.kickstarter.ui.compose.designsystem.KSSecretRewardBadge
+import com.kickstarter.ui.compose.designsystem.KSTheme
 import com.kickstarter.ui.data.ProjectData
 import com.kickstarter.viewmodels.AddOnViewHolderViewModel
-import kotlinx.android.synthetic.main.add_on_items.view.*
-import kotlinx.android.synthetic.main.add_on_title.view.*
-import kotlinx.android.synthetic.main.item_add_on.view.*
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.disposables.CompositeDisposable
 
-class AddOnViewHolder(private val view: View) : KSViewHolder(view) {
+class AddOnViewHolder(private val binding: ItemAddOnBinding) : KSViewHolder(binding.root) {
 
     private var viewModel = AddOnViewHolderViewModel.ViewModel(environment())
     private val currencyConversionString = context().getString(R.string.About_reward_amount)
-    private val ksString = environment().ksString()
+    private val ksString = requireNotNull(environment().ksString())
+    private val disposables = CompositeDisposable()
 
     init {
         val rewardItemAdapter = setUpItemAdapter()
 
+        this.viewModel.outputs.imageForReward()
+            .compose(observeForUIV2())
+            .subscribe {
+                binding.addOnImageView.visibility = View.VISIBLE
+                binding.addOnImageView.load(it.full()) {
+                    precision(Precision.EXACT)
+                    placeholder(R.color.soft_grey_disable)
+                }
+            }
+            .addToDisposable(disposables)
+
         this.viewModel.outputs.conversionIsGone()
-                .compose(bindToLifecycle())
-                .compose(observeForUI())
-                .subscribe(ViewUtils.setGone(this.view.add_on_conversion_text_view))
+            .compose(observeForUIV2())
+            .subscribe {
+                ViewUtils.setGone(binding.addOnConversionTextView, it)
+            }
+            .addToDisposable(disposables)
 
         this.viewModel.outputs.conversion()
-                .compose(bindToLifecycle())
-                .compose(observeForUI())
-                .subscribe { this.view.add_on_conversion_text_view.text = this.ksString.format(this.currencyConversionString,
-                        "reward_amount", it) }
+            .compose(observeForUIV2())
+            .subscribe {
+                binding.addOnConversionTextView.text = this.ksString.format(
+                    this.currencyConversionString,
+                    "reward_amount", it
+                )
+            }
+            .addToDisposable(disposables)
 
         this.viewModel.outputs.descriptionForNoReward()
-                .compose(bindToLifecycle())
-                .compose(observeForUI())
-                .subscribe { this.view.add_on_description_text_view.setText(it) }
+            .compose(observeForUIV2())
+            .subscribe { binding.addOnDescriptionTextView.setText(it) }
+            .addToDisposable(disposables)
 
         this.viewModel.outputs.titleForNoReward()
-                .compose(bindToLifecycle())
-                .compose(observeForUI())
-                .subscribe { this.view.add_on_title_no_spannable.setText(it) }
+            .compose(observeForUIV2())
+            .subscribe { binding.titleContainer.addOnTitleNoSpannable.setText(it) }
+            .addToDisposable(disposables)
 
         this.viewModel.outputs.descriptionForReward()
-                .compose(bindToLifecycle())
-                .compose(observeForUI())
-                .subscribe { this.view.add_on_description_text_view.text = it }
+            .compose(observeForUIV2())
+            .subscribe { binding.addOnDescriptionTextView.text = it }
+            .addToDisposable(disposables)
 
         this.viewModel.outputs.minimumAmountTitle()
-                .compose(bindToLifecycle())
-                .compose(observeForUI())
-                .subscribe { this.view.add_on_minimum_text_view.text = it }
+            .compose(observeForUIV2())
+            .subscribe { binding.addOnMinimumTextView.text = it }
+            .addToDisposable(disposables)
 
         this.viewModel.outputs.rewardItems()
-                .compose(bindToLifecycle())
-                .compose(observeForUI())
-                .subscribe { rewardItemAdapter.rewardsItems(it) }
+            .compose(observeForUIV2())
+            .subscribe { rewardItemAdapter.rewardsItems(it) }
+            .addToDisposable(disposables)
 
         this.viewModel.outputs.rewardItemsAreGone()
-                .compose(bindToLifecycle())
-                .compose(observeForUI())
-                .subscribe(ViewUtils.setGone(this.view.items_container))
+            .compose(observeForUIV2())
+            .subscribe {
+                ViewUtils.setGone(binding.addOnItemsContainer.addOnItemLayout, it)
+            }
+            .addToDisposable(disposables)
 
         this.viewModel.outputs.isAddonTitleGone()
-                .compose(bindToLifecycle())
-                .compose(observeForUI())
-                .subscribe { shouldHideAddonAmount ->
-                    if (shouldHideAddonAmount) {
-                        this.view.add_on_title_text_view.visibility = View.GONE
-                        this.view.add_on_title_no_spannable.visibility = View.VISIBLE
-                    } else {
-                        this.view.add_on_title_no_spannable.visibility = View.GONE
-                        this.view.add_on_title_text_view.visibility = View.VISIBLE
-                    }
+            .compose(observeForUIV2())
+            .subscribe { shouldHideAddonAmount ->
+                if (shouldHideAddonAmount) {
+                    binding.titleContainer.addOnTitleTextView.visibility = View.GONE
+                    binding.titleContainer.addOnTitleNoSpannable.visibility = View.VISIBLE
+                } else {
+                    binding.titleContainer.addOnTitleNoSpannable.visibility = View.GONE
+                    binding.titleContainer.addOnTitleTextView.visibility = View.VISIBLE
                 }
+            }
+            .addToDisposable(disposables)
 
         this.viewModel.outputs.titleForReward()
-                .compose(bindToLifecycle())
-                .compose(observeForUI())
-                .subscribe { this.view.add_on_title_no_spannable.text = it }
+            .compose(observeForUIV2())
+            .subscribe { binding.titleContainer.addOnTitleNoSpannable.text = it }
+            .addToDisposable(disposables)
 
         this.viewModel.outputs.titleForAddOn()
-                .compose(bindToLifecycle())
-                .compose(observeForUI())
-                .subscribe { this.view.add_on_title_text_view.text = RewardViewUtils.styleTitleForAddOns(context(), it.first, it.second) }
+            .compose(observeForUIV2())
+            .subscribe { binding.titleContainer.addOnTitleTextView.text = RewardViewUtils.styleTitleForAddOns(context(), it.first, it.second) }
+            .addToDisposable(disposables)
+
+        this.viewModel.outputs.localPickUpIsGone()
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe {
+                binding.rewardItemLocalPickupContainer.localPickupGroup.isGone = it
+            }
+            .addToDisposable(disposables)
+
+        this.viewModel.outputs.localPickUpName()
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe {
+                binding.rewardItemLocalPickupContainer.localPickupLocation.text = it
+            }
+            .addToDisposable(disposables)
     }
 
     override fun bindData(data: Any?) {
@@ -97,16 +144,69 @@ class AddOnViewHolder(private val view: View) : KSViewHolder(view) {
         }
     }
 
+    override fun destroy() {
+        viewModel.clear()
+        disposables.clear()
+        super.destroy()
+    }
+
     private fun bindReward(projectAndReward: Pair<ProjectData, Reward>) {
-        this.viewModel.inputs.configureWith(projectAndReward.first, projectAndReward.second)
+        val project = projectAndReward.first
+        val reward = projectAndReward.second
+
+        viewModel.inputs.configureWith(project, reward)
+
+        val hasImage = reward.image()?.full()?.isNotEmpty() == true
+
+        val badgeOverImage = binding.secretBadgeComposeOverImage
+        val badgeAboveCard = binding.secretBadgeComposeAboveCard
+
+        val showBadge = reward.isSecretReward() == true || reward.isFeatured() == true
+        if (showBadge) {
+            if (hasImage) {
+                badgeOverImage.visibility = View.VISIBLE
+                badgeAboveCard.visibility = View.GONE
+
+                badgeOverImage.setContent {
+                    KSTheme {
+                        Row(
+                            modifier = Modifier.wrapContentSize(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (reward.isSecretReward() == true) KSSecretRewardBadge()
+                            if (reward.isFeatured() == true) KSFeaturedRewardBadge()
+                        }
+                    }
+                }
+            } else {
+                badgeOverImage.visibility = View.GONE
+                badgeAboveCard.visibility = View.VISIBLE
+
+                badgeAboveCard.setContent {
+                    KSTheme {
+                        Row(
+                            modifier = Modifier.wrapContentSize(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (reward.isSecretReward() == true) KSSecretRewardBadge()
+                            if (reward.isFeatured() == true) KSFeaturedRewardBadge()
+                        }
+                    }
+                }
+            }
+        } else {
+            badgeOverImage.visibility = View.GONE
+            badgeAboveCard.visibility = View.GONE
+        }
     }
 
     private fun setUpItemAdapter(): RewardItemsAdapter {
         val rewardItemAdapter = RewardItemsAdapter()
-        val itemRecyclerView = view.add_on_item_recycler_view
+        val itemRecyclerView = binding.addOnItemsContainer.addOnItemRecyclerView
         itemRecyclerView.adapter = rewardItemAdapter
         itemRecyclerView.layoutManager = LinearLayoutManager(context())
         return rewardItemAdapter
     }
-
 }

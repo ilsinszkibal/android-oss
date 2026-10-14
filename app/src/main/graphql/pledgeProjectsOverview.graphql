@@ -1,0 +1,28 @@
+query PledgedProjectsOverview($first: Int, $after: String, $last: Int, $before: String, $tierTypes: [PledgeProjectsOverviewSort!]) {
+      pledgeProjectsOverview(tierTypes: $tierTypes) {
+        pledges(first : $first, after: $after, last : $last, before: $before) {
+          totalCount
+          edges {
+            cursor
+            node {
+                backing {
+                ...ppoCard
+                }
+                tierType
+                flags {
+                    icon
+                    message
+                    type
+                }
+                webviewUrl
+            }
+          }
+          pageInfo {
+          hasPreviousPage
+          hasNextPage
+            endCursor
+            startCursor
+          }
+        }
+      }
+    }

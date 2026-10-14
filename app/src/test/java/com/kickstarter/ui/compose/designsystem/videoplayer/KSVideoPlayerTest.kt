@@ -1,0 +1,989 @@
+package com.kickstarter.ui.compose.designsystem.videoplayer
+
+import android.graphics.Matrix
+import android.view.TextureView
+import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.isDisplayed
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlaybackException
+import androidx.media3.exoplayer.ExoPlayer
+import com.kickstarter.KSRobolectricTestCase
+import com.kickstarter.ui.compose.designsystem.KSTheme
+import org.junit.Assert.assertEquals
+import org.junit.Before
+import org.junit.Test
+import org.mockito.ArgumentCaptor
+import org.mockito.Mockito.atLeastOnce
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
+import org.mockito.Mockito.times
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.`when`
+import java.io.IOException
+
+class KSVideoPlayerTest() : KSRobolectricTestCase() {
+
+    private lateinit var textureView: TextureView
+    private val viewWidth = 1080
+    private val viewHeight = 1920
+
+    @Before
+    fun setup() {
+        textureView = mock(TextureView::class.java)
+        `when`(textureView.width).thenReturn(viewWidth)
+        `when`(textureView.height).thenReturn(viewHeight)
+    }
+
+    @Test
+    fun `applyZoomMatrix - Guard against zero video dimensions`() {
+        // - Call with 0 video dimensions
+        textureView.applyZoomMatrix(videoWidth = 0, videoHeight = 100)
+
+        // - No transform should be set
+        verify(textureView, never()).setTransform(any())
+    }
+
+    @Test
+    fun `applyZoomMatrix - Guard against zero TextureView dimensions`() {
+        `when`(textureView.width).thenReturn(0)
+
+        textureView.applyZoomMatrix(videoWidth = 100, videoHeight = 100)
+
+        verify(textureView, never()).setTransform(any())
+    }
+
+    @Test
+    fun `applyZoomMatrix - Handling negative dimension values`() {
+        textureView.applyZoomMatrix(videoWidth = -10, videoHeight = 100)
+
+        verify(textureView, never()).setTransform(any())
+    }
+
+    @Test
+    fun `applyZoomMatrix - Perfect aspect ratio match`() {
+        // Arrange: Video matches view exactly (9:16)
+        val videoWidth = 1080
+        val videoHeight = 1920
+
+        textureView.applyZoomMatrix(videoWidth, videoHeight)
+
+        // - should call setTransform(null) no transformation applied
+        verify(textureView).setTransform(null)
+    }
+
+    @Test
+    fun `applyZoomMatrix - Horizontal video in vertical view (Center Crop X)`() {
+        // Arrange: 16:9 Video in a 9:16 View.
+        // Video is "wider" relative to the view, so we must scale X up (overflow).
+        val videoWidth = 1920
+        val videoHeight = 1080
+        val matrixCaptor = ArgumentCaptor.forClass(Matrix::class.java)
+
+        textureView.applyZoomMatrix(videoWidth, videoHeight)
+
+        verify(textureView).setTransform(matrixCaptor.capture())
+        val matrix = matrixCaptor.value
+
+        val values = FloatArray(9)
+        matrix.getValues(values)
+
+        val scaleX = values[Matrix.MSCALE_X]
+        val scaleY = values[Matrix.MSCALE_Y]
+
+        // scaleX should be (1920/1080) / (1080/1920) = 1.77 / 0.56 = ~3.16
+        assert(scaleX > 1.0f)
+        assertEquals(1.0f, scaleY, 0.01f)
+    }
+
+    @Test
+    fun `applyZoomMatrix - Vertical video in horizontal view (Center Crop Y)`() {
+        // - Vertical video in a square view
+        `when`(textureView.width).thenReturn(1000)
+        `when`(textureView.height).thenReturn(1000)
+
+        val videoWidth = 500
+        val videoHeight = 1000 // 1:2 ratio
+        val matrixCaptor = ArgumentCaptor.forClass(Matrix::class.java)
+
+        textureView.applyZoomMatrix(videoWidth, videoHeight)
+
+        verify(textureView).setTransform(matrixCaptor.capture())
+        val values = FloatArray(9)
+        matrixCaptor.value.getValues(values)
+
+        // View is wider than video ratio, so scaleY must increase to crop top/bottom
+        assert(values[Matrix.MSCALE_Y] > 1.0f)
+        assertEquals(1.0f, values[Matrix.MSCALE_X], 0.01f)
+    }
+
+    @Test
+    fun `applyZoomMatrix - Matrix pivot point verification`() {
+        val videoWidth = 100
+        val videoHeight = 200
+        val matrixCaptor = ArgumentCaptor.forClass(Matrix::class.java)
+
+        textureView.applyZoomMatrix(videoWidth, videoHeight)
+
+        verify(textureView).setTransform(matrixCaptor.capture())
+
+        // - To verify pivot, we check if a point at (0,0) moves correctly relative to the center (viewWidth/2, viewHeight/2)
+        val matrix = matrixCaptor.value
+        val points = floatArrayOf(0f, 0f)
+        matrix.mapPoints(points)
+
+        // - If it scales from the center, the top-left (0,0) should move further away from the center (540, 960)
+        assert(points[0] < 0f || points[1] < 0f)
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun `test tapping surface controls visible video pauses when tapping again hides controls and plays`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    player = mockPlayer
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_CONTROLS.name, useUnmergedTree = true).assertDoesNotExist()
+
+        // - Tap to show controls
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_SURFACE.name, useUnmergedTree = true).performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_CONTROLS.name, useUnmergedTree = true).assertIsDisplayed()
+        // - Video should be paused
+        verify(mockPlayer).pause()
+
+        // - Tap surface again
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_SURFACE.name, useUnmergedTree = true).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_CONTROLS.name).assertDoesNotExist()
+
+        // - Video should be playing
+        verify(mockPlayer).play()
+    }
+
+    @Test
+    fun `test tapping play button hides controls and plays`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    player = mockPlayer
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_SURFACE.name).performClick()
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_PLAY_BUTTON.name).performClick()
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_CONTROLS.name).assertDoesNotExist()
+
+        verify(mockPlayer).play()
+
+        // Check Video Player Surface has click label
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_SURFACE.name)
+            .assertExists()
+    }
+
+    @Test
+    fun `test forward and rewind buttons are not present`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    player = mockPlayer
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_SURFACE.name).performClick()
+
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_REWIND_BUTTON.name).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_FORWARD_BUTTON.name).assertDoesNotExist()
+    }
+
+    @Test
+    fun `test tapping progress bar seeks video`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        `when`(mockPlayer.duration).thenReturn(100000L) // 100 seconds
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    player = mockPlayer
+                )
+            }
+        }
+
+        // - Tap the progress bar at 25% (offset x = 0.25 * width)
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_PROGRESS_BAR.name, useUnmergedTree = true)
+            .performTouchInput {
+                click(position = Offset(x = width * 0.25f, y = height / 2f))
+            }
+
+        // - Should seek to 25% of 100000L = 25000L
+        verify(mockPlayer).seekTo(25000L)
+
+        // Check Progress Bar semantics
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_PROGRESS_BAR.name, useUnmergedTree = true)
+            .assertExists()
+    }
+
+    @Test
+    fun `test dragging progress bar pauses video and releasing resumes`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        `when`(mockPlayer.duration).thenReturn(100000L)
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    player = mockPlayer
+                )
+            }
+        }
+
+        // - Drag on the progress bar: down → move → up
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_PROGRESS_BAR.name, useUnmergedTree = true)
+            .performTouchInput {
+                down(Offset(x = width * 0.2f, y = height / 2f))
+            }
+
+        composeTestRule.waitForIdle()
+
+        // - Player should be paused while scrubbing
+        verify(mockPlayer).pause()
+
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_PROGRESS_BAR.name, useUnmergedTree = true)
+            .performTouchInput {
+                moveBy(Offset(x = width * 0.3f, y = 0f))
+                up()
+            }
+
+        composeTestRule.waitForIdle()
+
+        // - Player should resume after scrub ends (controls are not visible)
+        verify(mockPlayer).play()
+    }
+
+    @Test
+    fun `test tapping progress bar does not show controls`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        `when`(mockPlayer.duration).thenReturn(100000L)
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    player = mockPlayer
+                )
+            }
+        }
+
+        // - Tap the progress bar (a pure tap, no drag)
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_PROGRESS_BAR.name, useUnmergedTree = true)
+            .performTouchInput {
+                click(position = Offset(x = width * 0.25f, y = height / 2f))
+            }
+        composeTestRule.waitForIdle()
+
+        // - The tap should seek but must not fall through to the surface click and show controls
+        verify(mockPlayer).seekTo(25000L)
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_CONTROLS.name, useUnmergedTree = true)
+            .assertDoesNotExist()
+    }
+
+    @Test
+    fun `test dragging progress bar does not show controls`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        `when`(mockPlayer.duration).thenReturn(100000L)
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    player = mockPlayer
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_PROGRESS_BAR.name, useUnmergedTree = true)
+            .performTouchInput {
+                down(Offset(x = width * 0.2f, y = height / 2f))
+                moveBy(Offset(x = width * 0.5f, y = 0f))
+                up()
+            }
+        composeTestRule.waitForIdle()
+
+        // - The drag must not fall through to the surface click and show controls
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_CONTROLS.name, useUnmergedTree = true)
+            .assertDoesNotExist()
+    }
+
+    @Test
+    fun `test scrubbing while controls visible does not resume playback on release`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        `when`(mockPlayer.duration).thenReturn(100000L)
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    player = mockPlayer
+                )
+            }
+        }
+
+        // - Tap surface to show controls (pauses video)
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_SURFACE.name).performClick()
+        composeTestRule.waitForIdle()
+        verify(mockPlayer).pause()
+
+        // - Drag on the progress bar while controls are visible
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_PROGRESS_BAR.name, useUnmergedTree = true)
+            .performTouchInput {
+                down(Offset(x = width * 0.2f, y = height / 2f))
+                moveBy(Offset(x = width * 0.5f, y = 0f))
+                up()
+            }
+
+        composeTestRule.waitForIdle()
+
+        // - play() should NOT have been called since controls are still showing
+        verify(mockPlayer, never()).play()
+    }
+
+    @Test
+    fun `test overlay content is displayed`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        val testTag = "overlay_test_tag"
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    player = mockPlayer,
+                    overlayContent = {
+                        Text(text = "Overlay Text", modifier = Modifier.testTag(testTag))
+                    }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(testTag, useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag(testTag, useUnmergedTree = true).isDisplayed()
+    }
+
+    @Test
+    fun `test empty video url does not render player surface`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "",
+                    isActive = true,
+                    player = mockPlayer
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_SURFACE.name).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_PROGRESS_BAR.name, useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun `test player does not autoplay when inactive`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = false,
+                    player = mockPlayer
+                )
+            }
+        }
+
+        composeTestRule.waitForIdle()
+
+        // - playWhenReady should be set to false when inactive
+        verify(mockPlayer).playWhenReady = false
+        verify(mockPlayer, never()).play()
+    }
+
+    @Test
+    fun `test progress bar is displayed on render`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    player = mockPlayer
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_PROGRESS_BAR.name, useUnmergedTree = true)
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `onBecameInactive fires when active player transitions to inactive`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        `when`(mockPlayer.currentPosition).thenReturn(3000L)
+        `when`(mockPlayer.duration).thenReturn(10000L)
+
+        var isActive by mutableStateOf(true)
+        var capturedWatchTime: Long? = null
+        var capturedDuration: Long? = null
+
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = isActive,
+                    player = mockPlayer,
+                    onBecameInactive = { watchTimeMs, videoDurationMs ->
+                        capturedWatchTime = watchTimeMs
+                        capturedDuration = videoDurationMs
+                    }
+                )
+            }
+        }
+
+        composeTestRule.waitForIdle()
+
+        isActive = false
+        composeTestRule.waitForIdle()
+
+        assertEquals(3000L, capturedWatchTime)
+        assertEquals(10000L, capturedDuration)
+    }
+
+    @Test
+    fun `onBecameInactive is not called when player starts inactive`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        var callCount = 0
+
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = false,
+                    player = mockPlayer,
+                    onBecameInactive = { _, _ -> callCount++ }
+                )
+            }
+        }
+
+        composeTestRule.waitForIdle()
+
+        assertEquals(0, callCount)
+    }
+
+    @Test
+    fun `onBecameInactive is not called when inactive player leaves composition`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        var callCount = 0
+        var showPlayer by mutableStateOf(true)
+
+        composeTestRule.setContent {
+            KSTheme {
+                if (showPlayer) {
+                    KSVideoPlayer(
+                        videoUrl = "https://example.com/video.mp4",
+                        isActive = false,
+                        player = mockPlayer,
+                        onBecameInactive = { _, _ -> callCount++ }
+                    )
+                }
+            }
+        }
+
+        composeTestRule.waitForIdle()
+        showPlayer = false
+        composeTestRule.waitForIdle()
+
+        assertEquals(0, callCount)
+    }
+
+    @Test
+    fun `onBecameInactive reports zero duration when ExoPlayer returns TIME_UNSET`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        `when`(mockPlayer.currentPosition).thenReturn(1000L)
+        `when`(mockPlayer.duration).thenReturn(Long.MIN_VALUE) // C.TIME_UNSET
+
+        var isActive by mutableStateOf(true)
+        var capturedDuration: Long? = null
+
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = isActive,
+                    player = mockPlayer,
+                    onBecameInactive = { _, videoDurationMs -> capturedDuration = videoDurationMs }
+                )
+            }
+        }
+
+        isActive = false
+        composeTestRule.waitForIdle()
+
+        assertEquals(0L, capturedDuration)
+    }
+
+    @Test
+    fun `test player pauses on lifecycle ON_PAUSE and resumes on ON_RESUME when active`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        val lifecycleOwner = object : LifecycleOwner {
+            private val registry = LifecycleRegistry(this)
+            override val lifecycle: Lifecycle = registry
+            fun handleEvent(event: Lifecycle.Event) = registry.handleLifecycleEvent(event)
+        }
+        lifecycleOwner.handleEvent(Lifecycle.Event.ON_RESUME)
+
+        composeTestRule.setContent {
+            KSTheme {
+                CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
+                    KSVideoPlayer(
+                        videoUrl = "https://example.com/video.mp4",
+                        isActive = true,
+                        player = mockPlayer
+                    )
+                }
+            }
+        }
+
+        composeTestRule.waitForIdle()
+
+        // - Move to ON_PAUSE (simulates backgrounding)
+        lifecycleOwner.handleEvent(Lifecycle.Event.ON_PAUSE)
+        composeTestRule.waitForIdle()
+
+        // - Player should be paused (playWhenReady = false)
+        verify(mockPlayer).playWhenReady = false
+
+        // - Move back to ON_RESUME
+        lifecycleOwner.handleEvent(Lifecycle.Event.ON_RESUME)
+        composeTestRule.waitForIdle()
+
+        // - Player should resume (playWhenReady = true)
+        verify(mockPlayer, atLeastOnce()).playWhenReady = true
+    }
+
+    @Test
+    fun `test player does not resume on lifecycle ON_RESUME when inactive`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        val lifecycleOwner = object : LifecycleOwner {
+            private val registry = LifecycleRegistry(this)
+            override val lifecycle: Lifecycle = registry
+            fun handleEvent(event: Lifecycle.Event) = registry.handleLifecycleEvent(event)
+        }
+        lifecycleOwner.handleEvent(Lifecycle.Event.ON_RESUME)
+
+        composeTestRule.setContent {
+            KSTheme {
+                CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
+                    KSVideoPlayer(
+                        videoUrl = "https://example.com/video.mp4",
+                        isActive = false,
+                        player = mockPlayer
+                    )
+                }
+            }
+        }
+
+        composeTestRule.waitForIdle()
+
+        // - Move to ON_PAUSE
+        lifecycleOwner.handleEvent(Lifecycle.Event.ON_PAUSE)
+        composeTestRule.waitForIdle()
+
+        verify(mockPlayer, atLeastOnce()).playWhenReady = false
+
+        // - Move back to ON_RESUME
+        lifecycleOwner.handleEvent(Lifecycle.Event.ON_RESUME)
+        composeTestRule.waitForIdle()
+
+        // - Player should NOT resume (playWhenReady should stay false or be set to false again)
+        // Since isActive is false, it should have been set to false initially and stay false.
+        verify(mockPlayer, atLeastOnce()).playWhenReady = false
+        verify(mockPlayer, never()).play()
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun `test controls are hidden when paused video becomes active again after swiping away and back`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+
+        var isActive by mutableStateOf(true)
+
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = isActive,
+                    player = mockPlayer
+                )
+            }
+        }
+
+        // - Tap surface to pause and show controls
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_SURFACE.name).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_CONTROLS.name, useUnmergedTree = true)
+            .assertIsDisplayed()
+
+        // - Swipe away to the next video (page deactivates)
+        isActive = false
+        composeTestRule.waitForIdle()
+
+        // - Swipe back (page reactivates and the video auto-resumes)
+        isActive = true
+        composeTestRule.waitForIdle()
+
+        // - Controls overlay should be hidden to reflect the playing state
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_CONTROLS.name, useUnmergedTree = true)
+            .assertDoesNotExist()
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun `test controls are hidden when paused video resumes after app returns to foreground`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        val lifecycleOwner = object : LifecycleOwner {
+            private val registry = LifecycleRegistry(this)
+            override val lifecycle: Lifecycle = registry
+            fun handleEvent(event: Lifecycle.Event) = registry.handleLifecycleEvent(event)
+        }
+        lifecycleOwner.handleEvent(Lifecycle.Event.ON_RESUME)
+
+        composeTestRule.setContent {
+            KSTheme {
+                CompositionLocalProvider(LocalLifecycleOwner provides lifecycleOwner) {
+                    KSVideoPlayer(
+                        videoUrl = "https://example.com/video.mp4",
+                        isActive = true,
+                        player = mockPlayer
+                    )
+                }
+            }
+        }
+
+        // - Tap surface to pause and show controls
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_SURFACE.name).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_CONTROLS.name, useUnmergedTree = true)
+            .assertIsDisplayed()
+
+        // - Navigate away (app backgrounds)
+        lifecycleOwner.handleEvent(Lifecycle.Event.ON_PAUSE)
+        composeTestRule.waitForIdle()
+
+        // - Return to the video feed (app foregrounds and the video auto-resumes)
+        lifecycleOwner.handleEvent(Lifecycle.Event.ON_RESUME)
+        composeTestRule.waitForIdle()
+
+        // - Controls overlay should be hidden to reflect the playing state
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_CONTROLS.name, useUnmergedTree = true)
+            .assertDoesNotExist()
+    }
+
+    @Test
+    fun `poster is displayed while the first frame has not rendered`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    previewImageUrl = "https://example.com/poster.jpg",
+                    player = mockPlayer
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_POSTER.name, useUnmergedTree = true)
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `poster is not shown when previewImageUrl is null`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    previewImageUrl = null,
+                    player = mockPlayer
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_POSTER.name, useUnmergedTree = true)
+            .assertDoesNotExist()
+    }
+
+    @Test
+    fun `poster is removed once the player renders its first frame`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    previewImageUrl = "https://example.com/poster.jpg",
+                    player = mockPlayer
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // - Poster is present before the first frame renders
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_POSTER.name, useUnmergedTree = true)
+            .assertExists()
+
+        // - Capture the player listener registered by the TextureView factory and simulate the first frame
+        val listenerCaptor = ArgumentCaptor.forClass(Player.Listener::class.java)
+        verify(mockPlayer, atLeastOnce()).addListener(listenerCaptor.capture())
+        composeTestRule.runOnUiThread {
+            listenerCaptor.allValues.forEach { it.onRenderedFirstFrame() }
+        }
+        composeTestRule.waitForIdle()
+
+        // - Poster fades out and is removed once the video is rendering
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_POSTER.name, useUnmergedTree = true)
+            .assertDoesNotExist()
+    }
+
+    @Test
+    fun `onPlaybackError surfaces the player error with the active flag`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        var reportedError: PlaybackException? = null
+        var reportedIsActive: Boolean? = null
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    player = mockPlayer,
+                    onPlaybackError = { error, isActive ->
+                        reportedError = error
+                        reportedIsActive = isActive
+                    }
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // Capture the listeners KSVideoPlayer registered and simulate a player error.
+        val error = mock(PlaybackException::class.java)
+        val listenerCaptor = ArgumentCaptor.forClass(Player.Listener::class.java)
+        verify(mockPlayer, atLeastOnce()).addListener(listenerCaptor.capture())
+        composeTestRule.runOnUiThread {
+            listenerCaptor.allValues.forEach { it.onPlayerError(error) }
+        }
+        composeTestRule.waitForIdle()
+
+        // A non-recoverable error (mock errorCode defaults to 0) is surfaced (isActive=true) but the
+        // player is NOT retried.
+        assertEquals(error, reportedError)
+        assertEquals(true, reportedIsActive)
+        verify(mockPlayer, never()).prepare()
+    }
+
+    @Test
+    fun `a recoverable error on the active video is re-prepared`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    player = mockPlayer
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        val error = ExoPlaybackException.createForSource(
+            IOException("decoder reclaimed"),
+            PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED
+        )
+        val listenerCaptor = ArgumentCaptor.forClass(Player.Listener::class.java)
+        verify(mockPlayer, atLeastOnce()).addListener(listenerCaptor.capture())
+        composeTestRule.runOnUiThread {
+            listenerCaptor.allValues.forEach { it.onPlayerError(error) }
+        }
+        composeTestRule.waitForIdle()
+
+        verify(mockPlayer, times(1)).prepare()
+    }
+
+    @Test
+    fun `a recoverable error on an inactive video is reported but not re-prepared`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        var reported = false
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = false,
+                    player = mockPlayer,
+                    onPlaybackError = { _, _ -> reported = true }
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        val error = ExoPlaybackException.createForSource(
+            IOException("decoder reclaimed"),
+            PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED
+        )
+        val listenerCaptor = ArgumentCaptor.forClass(Player.Listener::class.java)
+        verify(mockPlayer, atLeastOnce()).addListener(listenerCaptor.capture())
+        composeTestRule.runOnUiThread {
+            listenerCaptor.allValues.forEach { it.onPlayerError(error) }
+        }
+        composeTestRule.waitForIdle()
+
+        // Off-screen: reported for telemetry, but never re-prepared (must not re-grab a decoder).
+        assertEquals(true, reported)
+        verify(mockPlayer, never()).prepare()
+    }
+
+    @Test
+    fun `mute button appears with the controls and is hidden while playing`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    player = mockPlayer
+                )
+            }
+        }
+
+        // - While playing, the controls (and the mute button) are hidden.
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_MUTE_BUTTON.name, useUnmergedTree = true)
+            .assertDoesNotExist()
+
+        // - Tapping the surface reveals the controls; the mute button appears with them.
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_SURFACE.name).performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_MUTE_BUTTON.name, useUnmergedTree = true)
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `tapping the mute button reports the resulting mute state`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        var reportedMuted: Boolean? = null
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    isMuted = false,
+                    player = mockPlayer,
+                    onMuteToggle = { reportedMuted = it }
+                )
+            }
+        }
+
+        // - Reveal the controls so the mute button is present.
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_SURFACE.name).performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_MUTE_BUTTON.name, useUnmergedTree = true)
+            .performClick()
+
+        // - Was unmuted, so tapping reports the resulting state: now muted.
+        assertEquals(true, reportedMuted)
+    }
+
+    @Test
+    fun `player audio is silenced when isMuted is true`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    isMuted = true,
+                    player = mockPlayer
+                )
+            }
+        }
+
+        composeTestRule.waitForIdle()
+
+        verify(mockPlayer).volume = 0f
+    }
+
+    @Test
+    fun `toggling isMuted updates the player volume`() {
+        val mockPlayer = mock(ExoPlayer::class.java)
+        var isMuted by mutableStateOf(false)
+        composeTestRule.setContent {
+            KSTheme {
+                KSVideoPlayer(
+                    videoUrl = "https://example.com/video.mp4",
+                    isActive = true,
+                    isMuted = isMuted,
+                    player = mockPlayer,
+                    onMuteToggle = { isMuted = it }
+                )
+            }
+        }
+
+        composeTestRule.waitForIdle()
+        // - Starts unmuted (full volume)
+        verify(mockPlayer, atLeastOnce()).volume = 1f
+
+        // - Reveal the controls so the mute button is present, then tap it.
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_SURFACE.name).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_MUTE_BUTTON.name, useUnmergedTree = true)
+            .performClick()
+        composeTestRule.waitForIdle()
+
+        // - Tapping mute silences the player
+        verify(mockPlayer).volume = 0f
+    }
+
+    private fun <T> any(): T = org.mockito.ArgumentMatchers.any()
+}

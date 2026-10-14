@@ -1,42 +1,36 @@
 buildscript {
-    ext.kotlin_version = '1.4.20'
+    ext.kotlin_version = '2.1.21'
+    ext.jacoco_version = '0.8.8'
 
     repositories {
-        jcenter()
         google()
+        mavenCentral()
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:4.1.1'
-        classpath 'com.google.gms:google-services:4.3.3'
+        classpath 'com.android.tools.build:gradle:8.13.0'
+        classpath 'com.google.gms:google-services:4.4.3'
+        classpath "com.google.firebase:perf-plugin:2.0.1"
+        classpath "org.jacoco:org.jacoco.core:$jacoco_version"
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-        classpath 'com.google.firebase:perf-plugin:1.3.3'
+        classpath "org.jetbrains.kotlin.plugin.compose:org.jetbrains.kotlin.plugin.compose.gradle.plugin:$kotlin_version"
     }
 }
 
 allprojects {
     repositories {
         google()
-        maven { url = uri("https://dl.bintray.com/apollographql/android/") }
-        jcenter()
         mavenCentral()
+        maven { url 'https://s3-us-west-2.amazonaws.com/si-mobile-sdks/android/' }
         maven {
-            url "https://s3-us-west-2.amazonaws.com/si-mobile-sdks/android/"
+            url 'http://appboy.github.io/appboy-android-sdk/sdk'
+            allowInsecureProtocol = true
         }
         maven {
-            url 'http://dl.bintray.com/optimizely/optimizely'
+            url 'http://appboy.github.io/appboy-segment-android/sdk'
+            allowInsecureProtocol = true
         }
     }
 }
 
 project.ext.preDexLibs = !project.hasProperty('disablePreDex')
-
-subprojects {
-    project.plugins.whenPluginAdded { plugin ->
-        if ("com.android.build.gradle.AppPlugin" == plugin.class.name) {
-            project.android.dexOptions.preDexLibraries = rootProject.ext.preDexLibs
-        } else if ("com.android.build.gradle.LibraryPlugin" == plugin.class.name) {
-            project.android.dexOptions.preDexLibraries = rootProject.ext.preDexLibs
-        }
-    }
-}

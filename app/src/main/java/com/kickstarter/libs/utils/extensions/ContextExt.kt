@@ -1,0 +1,298 @@
+@file:JvmName("ContextExt")
+package com.kickstarter.libs.utils.extensions
+
+import android.app.AlertDialog
+import android.app.Application
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.annotation.OptIn
+import androidx.annotation.VisibleForTesting
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.Composable
+import androidx.core.content.ContextCompat
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
+import com.kickstarter.KSApplication
+import com.kickstarter.R
+import com.kickstarter.libs.Environment
+import com.kickstarter.libs.featureflag.FlagKey
+import com.kickstarter.libs.utils.Secrets
+import com.kickstarter.libs.utils.WebUtils
+import com.kickstarter.ui.SharedPreferenceKey
+import com.kickstarter.ui.activities.AppThemes
+import com.stripe.android.paymentsheet.PaymentSheet
+
+const val header = "User-Agent"
+const val ua = "Custom-UA"
+
+fun Context.userAgent() = if (this.applicationContext.isKSApplication()) {
+    val build = requireNotNull(this.applicationContext.getEnvironment()?.build())
+    WebUtils.userAgent(build)
+} else ua
+
+fun Context.isKSApplication() = (this is KSApplication) && !this.isInUnitTests
+
+fun Context.getEnvironment(): Environment? {
+    return (this.applicationContext as KSApplication).component()?.environment()
+}
+
+/**
+ * Returns true if the current device is an emulator.
+ */
+fun isEmulator(): Boolean {
+    return (
+        Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic") ||
+            Build.FINGERPRINT.startsWith("generic") ||
+            Build.FINGERPRINT.startsWith("unknown") ||
+            Build.HARDWARE.contains("goldfish") ||
+            Build.HARDWARE.contains("ranchu") ||
+            Build.MODEL.contains("google_sdk") ||
+            Build.MODEL.contains("Emulator") ||
+            Build.MODEL.contains("Android SDK built for x86") ||
+            Build.MANUFACTURER.contains("Genymotion") ||
+            Build.PRODUCT.contains("sdk_google") ||
+            Build.PRODUCT.contains("google_sdk") ||
+            Build.PRODUCT.contains("sdk") ||
+            Build.PRODUCT.contains("sdk_x86") ||
+            Build.PRODUCT.contains("vbox86p") ||
+            Build.PRODUCT.contains("emulator") ||
+            Build.PRODUCT.contains("simulator")
+        )
+}
+
+/**
+ * Initializes and returns a configured [ExoPlayer] instance.
+ *
+ * This player is preconfigured with KS custom User-Agent and uses a [DefaultDataSource.Factory]
+ * to support media playback over HTTP(S).
+ *
+ * It also configures the [DefaultRenderersFactory] to disable asynchronous codec queuing
+ * specifically when running on an emulator. This helps avoid
+ * [androidx.media3.exoplayer.mediacodec.MediaCodecRenderer.DecoderInitializationException]
+ * (specifically "Decoder init failed: c2.goldfish.h264.decoder") which is a known issue
+ * with the emulator's H.264 decoder and Media3's asynchronous implementation.
+ *
+ * Note: This method opts into Media3's [UnstableApi] due to the usage of [setMediaSourceFactory] and
+ * [setRenderersFactory], which are required for setting custom HTTP headers and codec configurations.
+ */
+@OptIn(UnstableApi::class)
+fun Context.initializeExoplayer(): ExoPlayer {
+    val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+        .setUserAgent(this.userAgent())
+
+    val dataSourceFactory = DefaultDataSource.Factory(this, httpDataSourceFactory)
+
+    val renderersFactory = DefaultRenderersFactory(this)
+    if (isEmulator()) {
+        // - Disable asynchronous codec queuing to avoid "Decoder init failed: c2.goldfish.h264.decoder" on emulators
+        renderersFactory.forceDisableMediaCodecAsynchronousQueueing()
+    }
+
+    // Cap buffer to prevent OOM when multiple players are alive simultaneously (e.g. pager with
+    // beyondViewportPageCount=1 keeps up to 3 instances). ExoPlayer's defaults (50s / unlimited
+    // bytes) let each instance consume 30-50 MB, exhausting the heap on constrained devices.
+    val loadControl = DefaultLoadControl.Builder()
+        .setBufferDurationsMs(
+            /* minBufferMs */ 10_000,
+            /* maxBufferMs */ 20_000,
+            /* bufferForPlaybackMs */ 1_000,
+            /* bufferForPlaybackAfterRebufferMs */ 1_500
+        )
+        .setTargetBufferBytes(12 * 1024 * 1024)
+        .setPrioritizeTimeOverSizeThresholds(true)
+        .build()
+
+    val player = ExoPlayer.Builder(this, renderersFactory)
+        .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+        .setLoadControl(loadControl)
+        .setBandwidthMeter(DefaultBandwidthMeter.getSingletonInstance(this))
+        .build()
+
+    return player
+}
+
+@Composable
+fun Context.isDarkModeEnabled(env: Environment): Boolean {
+    val darkModeEnabled = env.featureFlagClient()?.getBoolean(FlagKey.ANDROID_DARK_MODE_ENABLED) ?: false
+    val theme = env.sharedPreferences()
+        ?.getInt(SharedPreferenceKey.APP_THEME, AppThemes.MATCH_SYSTEM.ordinal)
+        ?: AppThemes.MATCH_SYSTEM.ordinal
+
+    return if (darkModeEnabled) {
+        when (theme) {
+            AppThemes.MATCH_SYSTEM.ordinal -> isSystemInDarkTheme()
+            AppThemes.DARK.ordinal -> true
+            AppThemes.LIGHT.ordinal -> false
+            else -> false
+        }
+    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        isSystemInDarkTheme() // Force dark mode uses system theme
+    } else false
+}
+
+/**
+ * if the current context is an instance of Application android base class
+ * register the callbacks provided on the parameter.
+ *
+ * @param callbacks
+ */
+fun Context.registerActivityLifecycleCallbacks(callbacks: Application.ActivityLifecycleCallbacks) {
+    if (this is Application) {
+        this.registerActivityLifecycleCallbacks(callbacks)
+    }
+}
+
+fun Context.checkPermissions(permission: String): Boolean {
+    return ContextCompat.checkSelfPermission(
+        this,
+        permission
+    ) == PackageManager.PERMISSION_DENIED
+}
+
+fun Context.showAlertDialog(
+    title: String? = "",
+    message: String? = "",
+    positiveActionTitle: String? = null,
+    negativeActionTitle: String? = null,
+    isCancelable: Boolean = true,
+    positiveAction: (() -> Unit)? = null,
+    negativeAction: (() -> Unit)? = null
+) {
+
+    // setup the alert builder
+    val builder = AlertDialog.Builder(this).apply {
+        setTitle(title)
+        setMessage(message)
+
+        // add a button
+        positiveActionTitle?.let {
+            setPositiveButton(positiveActionTitle) { dialog, _ ->
+                dialog.dismiss()
+                positiveAction?.invoke()
+            }
+        }
+
+        negativeActionTitle?.let {
+            setNegativeButton(negativeActionTitle) { dialog, _ ->
+                dialog.dismiss()
+                negativeAction?.invoke()
+            }
+        }
+
+        setCancelable(isCancelable)
+    }
+
+    // create and show the alert dialog
+    val dialog: AlertDialog = builder.create()
+    dialog.show()
+}
+
+/**
+ * Provides the configuration for the PaymentSheet, following the specs
+ *  @see [link](https://stripe.com/docs/payments/accept-a-payment?platform=android&ui=elements#android-flowcontroller)
+ *
+ * @param googlePayCountryCode The two-letter ISO country code, e.g. "US" or "GB".
+ * @param googlePayCurrencyCode The three-letter ISO 4217 alphabetic currency code, e.g. "USD" or "EUR".
+ * Required in order to support Google Pay when processing a Setup Intent.
+ */
+fun Context.getPaymentSheetConfiguration(
+    userEmail: String,
+    googlePayEnabled: Boolean = false,
+    googlePayCountryCode: String? = null,
+    googlePayCurrencyCode: String? = null
+): PaymentSheet.Configuration {
+    val stripeLinkEnabled = this.getEnvironment()?.featureFlagClient()?.getBoolean(FlagKey.ANDROID_STRIPE_LINK) ?: false
+    // TODO: Wait for stripe to devise a client-side option for turning off link
+    val googlePayConfiguration = this.getGooglePayConfiguration(
+        googlePayEnabled,
+        googlePayCountryCode,
+        googlePayCurrencyCode
+    )
+
+    return PaymentSheet.Configuration(
+        merchantDisplayName = getString(R.string.app_name),
+        allowsDelayedPaymentMethods = true,
+        appearance = this.getPaymentSheetAppearance(),
+        defaultBillingDetails = PaymentSheet.BillingDetails(email = userEmail),
+        googlePay = googlePayConfiguration,
+    )
+}
+
+@VisibleForTesting
+fun Context.getGooglePayConfiguration(
+    enabled: Boolean,
+    countryCode: String?,
+    currencyCode: String?
+): PaymentSheet.GooglePayConfiguration? {
+    val countryCode = countryCode?.trim()?.takeIf { it.isNotEmpty() }
+    val currencyCode = currencyCode?.trim()?.takeIf { it.isNotEmpty() }
+
+    val googlePayEnvironment =
+        if (this.getEnvironment()?.webEndpoint() == Secrets.WebEndpoint.PRODUCTION) {
+            PaymentSheet.GooglePayConfiguration.Environment.Production
+        } else {
+            PaymentSheet.GooglePayConfiguration.Environment.Test
+        }
+
+    // `currencyCode` is required to use Google Pay with Setup Intents
+    return if (enabled && countryCode != null && currencyCode != null) {
+        PaymentSheet.GooglePayConfiguration(
+            environment = googlePayEnvironment,
+            countryCode = countryCode,
+            currencyCode = currencyCode
+        )
+    } else null
+}
+
+/**
+ * Provides the color configuration for the PaymentSheet, following the specs
+ *  @see [link](https://stripe.com/docs/elements/appearance-api?platform=android#colors-android)
+ */
+fun Context.getPaymentSheetAppearance(): PaymentSheet.Appearance {
+    return PaymentSheet.Appearance(
+        colorsLight = PaymentSheet.Colors(
+            primary = getColor(R.color.primary),
+            surface = getColor(R.color.kds_white),
+            component = getColor(R.color.kds_white),
+            componentBorder = getColor(R.color.kds_support_400),
+            componentDivider = getColor(R.color.kds_black),
+            onComponent = getColor(R.color.kds_black),
+            subtitle = getColor(R.color.kds_black),
+            placeholderText = getColor(R.color.kds_support_500),
+            onSurface = getColor(R.color.kds_black),
+            appBarIcon = getColor(R.color.kds_black),
+            error = getColor(R.color.kds_alert),
+        ),
+
+        // TODO: Get correct colors for this
+        colorsDark = PaymentSheet.Colors(
+            primary = getColor(R.color.kds_create_300),
+            surface = getColor(R.color.kds_black),
+            component = getColor(R.color.kds_black),
+            componentBorder = getColor(R.color.kds_support_300),
+            componentDivider = getColor(R.color.kds_white),
+            onComponent = getColor(R.color.kds_white),
+            subtitle = getColor(R.color.kds_white),
+            placeholderText = getColor(R.color.kds_support_200),
+            onSurface = getColor(R.color.kds_white),
+            appBarIcon = getColor(R.color.kds_white),
+            error = getColor(R.color.kds_alert),
+        ),
+        shapes = PaymentSheet.Shapes(
+            cornerRadiusDp = 12.0f,
+            borderStrokeWidthDp = 0.5f
+        ),
+        primaryButton = PaymentSheet.PrimaryButton(
+            shape = PaymentSheet.PrimaryButtonShape(
+                cornerRadiusDp = 12.0f
+            ),
+        )
+    )
+}

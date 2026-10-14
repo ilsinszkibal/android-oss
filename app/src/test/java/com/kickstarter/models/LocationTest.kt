@@ -3,7 +3,7 @@ package com.kickstarter.models
 import com.kickstarter.mock.factories.LocationFactory
 import junit.framework.TestCase
 
-class LocationTest: TestCase() {
+class LocationTest : TestCase() {
 
     fun testEquals_whenSecondLocationNull_returnFalse() {
         val locA = LocationFactory.empty()
@@ -38,5 +38,18 @@ class LocationTest: TestCase() {
         val locB = LocationFactory.germany().toBuilder().city(null).build()
 
         assertFalse(locA == locB)
+    }
+
+    fun testDefaultInit() {
+        val loc = Location.builder().build()
+
+        assertTrue(loc.displayableName() == "")
+        assertTrue(loc.city() == "")
+        assertTrue(loc.country() == "")
+        assertTrue(loc.expandedCountry() == "")
+        assertTrue(loc.name() == "")
+        assertTrue(loc.state() == "")
+        assertTrue(loc.projectsCount() == 0)
+        assertTrue(loc.id() == 0L)
     }
 }

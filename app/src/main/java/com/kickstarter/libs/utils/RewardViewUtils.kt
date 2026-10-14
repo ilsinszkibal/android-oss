@@ -9,14 +9,22 @@ import android.text.style.RelativeSizeSpan
 import android.util.Pair
 import androidx.annotation.StringRes
 import com.kickstarter.R
+import com.kickstarter.libs.Environment
 import com.kickstarter.libs.KSCurrency
 import com.kickstarter.libs.KSString
+import com.kickstarter.libs.NumberOptions
 import com.kickstarter.libs.models.Country
 import com.kickstarter.libs.utils.extensions.isBacked
+import com.kickstarter.libs.utils.extensions.isNull
 import com.kickstarter.libs.utils.extensions.trimAllWhitespace
+import com.kickstarter.models.Backing
 import com.kickstarter.models.Project
 import com.kickstarter.models.Reward
+import com.kickstarter.models.ShippingRule
 import java.math.RoundingMode
+import kotlin.math.floor
+
+private const val EMPTY_STRING = ""
 
 object RewardViewUtils {
 
@@ -28,11 +36,11 @@ object RewardViewUtils {
         val backing = project.backing()
         val hasAddOnsSelected = backing?.addOns()?.isNotEmpty() ?: false
 
-        if((backing == null || !backing.isBacked(reward)) && RewardUtils.isAvailable(project, reward)) {
+        if ((backing == null || !backing.isBacked(reward)) && RewardUtils.isAvailableForProject(project, reward)) {
             return R.string.Select
         }
 
-        return if(backing != null && backing.isBacked(reward)) {
+        return if (backing != null && backing.isBacked(reward)) {
             when {
                 !reward.hasAddons() -> R.string.Selected
                 reward.hasAddons() || hasAddOnsSelected -> R.string.Continue
@@ -84,6 +92,64 @@ object RewardViewUtils {
     }
 
     /**
+     * Returns a SpannableString representing currency that shrinks currency symbol if it's necessary.
+     * Special case: US people looking at US currency just get the currency symbol.
+     *
+     */
+    fun styleCurrency(value: Double, projectCurrency: String?, projectCurrentCurrency: String?, ksCurrency: KSCurrency): SpannableString {
+        val formattedCurrency = ksCurrency.format(initialValue = value, projectCurrency = projectCurrency, projectCurrentCurrency = projectCurrentCurrency, roundingMode = RoundingMode.HALF_UP)
+        val spannableString = SpannableString(formattedCurrency)
+
+        val country = projectCurrency?.let {
+            Country.findByCurrencyCode(it) ?: return spannableString
+        } ?: return spannableString
+
+        val currencyNeedsCode = ksCurrency.currencyNeedsCode(country, true)
+        val currencySymbolToDisplay = ksCurrency.getCurrencySymbol(country, true).trimAllWhitespace()
+
+        if (currencyNeedsCode) {
+            val startOfSymbol = formattedCurrency.indexOf(currencySymbolToDisplay)
+            val endOfSymbol = startOfSymbol + currencySymbolToDisplay.length
+            spannableString.setSpan(RelativeSizeSpan(.7f), startOfSymbol, endOfSymbol, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+        }
+
+        return spannableString
+    }
+
+    /**
+     * Returns a String representing currency based on given currency code and symbol ex. $12 USD
+     */
+    fun formatCurrency(
+        initialValue: Double,
+        currencyCode: String? = null,
+        currencySymbol: String? = null,
+        roundingMode: RoundingMode = RoundingMode.DOWN,
+    ): String {
+        val roundedValue = getRoundedValue(initialValue, roundingMode)
+        val numberOptions = NumberOptions.builder()
+            .currencyCode(currencyCode)
+            .currencySymbol(currencySymbol)
+            .roundingMode(roundingMode)
+            .precision(NumberUtils.precision(initialValue, roundingMode))
+            .build()
+        return NumberUtils.format(roundedValue, numberOptions).trimAllWhitespace()
+    }
+
+    /**
+     * Returns a number rounded to the specification.
+     *
+     * @param initialValue Value to convert, local to the project's currency.
+     * @param roundingMode When this is DOWN, we get the floor of the initialValue.
+     */
+    private fun getRoundedValue(initialValue: Double, roundingMode: RoundingMode): Float {
+        return if (roundingMode == RoundingMode.DOWN) {
+            floor(initialValue).toFloat()
+        } else {
+            initialValue.toFloat()
+        }
+    }
+
+    /**
      * Returns the title for an Add On ie: 1 x TITLE
      *  [1 x] in green
      *  TITLE regular string
@@ -93,9 +159,259 @@ object RewardViewUtils {
         val numberGreenCharacters = quantity.toString().length + symbol.length
         val spannable = SpannableString(quantity.toString() + symbol + title)
         spannable.setSpan(
-                ForegroundColorSpan(context.getColor(R.color.kds_create_700)),
-                0, numberGreenCharacters,
-                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            ForegroundColorSpan(context.getColor(R.color.kds_create_700)),
+            0, numberGreenCharacters,
+            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
         return spannable
+    }
+
+    /**
+     * Returns the string for the error message a user receives when their inputted bonus amount causes
+     * the total pledge amount to exceed the max pledge amount:
+     *
+     *  Enter an amount less than $X.
+     *
+     *  where X is calculated as maxPledgeAmount - rewardAmount
+     */
+    fun getMaxInputString(
+        context: Context,
+        selectedReward: Reward?,
+        maxPledgeAmount: Double,
+        totalAmount: Double,
+        totalBonusSupport: Double,
+        currencySymbolStartAndEnd: kotlin.Pair<String?, String?>,
+        environment: Environment?
+    ): String {
+
+        // rewardAmount + totalBonusSupport = totalAmount
+        // totalAmount must be <= maxPledgeAmount
+
+        val maxInputAmount = if (selectedReward != null && RewardUtils.isNoReward(selectedReward)) {
+            maxPledgeAmount
+        } else {
+            val rewardAmount = totalAmount - totalBonusSupport
+            maxPledgeAmount - rewardAmount
+        }
+        val maxInputAmountWithCurrency =
+            (currencySymbolStartAndEnd.first ?: "") +
+                if (maxInputAmount % 1.0 == 0.0) maxInputAmount.toInt().toString()
+                else maxInputAmount.toString() + (currencySymbolStartAndEnd.second ?: "")
+
+        return environment?.ksString()?.format(
+            context.getString(R.string.Enter_an_amount_less_than_max_pledge), // TODO: MBL-1416 Copy should say less than or equal to
+            "max_pledge",
+            maxInputAmountWithCurrency
+        ) ?: ""
+    }
+
+    /**
+     * Return a string for the estimated shipping cost of a single Reward for a given Location:
+     * either a range or a fixed cost, depending on the shipping rule for that location.
+     *
+     * Ex. "About $10-$15" or "$10"
+     *
+     * Used specifically for each Reward Card in the Rewards Carousel.
+     */
+    fun getEstimatedShippingCost(
+        context: Context,
+        ksCurrency: KSCurrency,
+        ksString: KSString,
+        project: Project,
+        reward: Reward,
+        locationId: Long,
+    ): String? {
+        if (RewardUtils.isDigital(reward) || RewardUtils.isLocalPickup(reward) || !RewardUtils.isShippable(reward))
+            return null
+
+        val shippingRule = reward.shippingRules()?.firstOrNull { it.location()?.id() == locationId }
+            ?: if (RewardUtils.shipsWorldwide(reward)) reward.shippingRules()?.firstOrNull() else null
+
+        if (shippingRule == null)
+            return null
+
+        val estimatedMin = shippingRule.estimatedMin()
+        val estimatedMax = shippingRule.estimatedMax()
+        val cost = shippingRule.cost()
+
+        if (estimatedMin > 0.0 || estimatedMax > 0.0) {
+            val estimatedMinFormatted = ksCurrency.format(estimatedMin, project, RoundingMode.HALF_UP)
+            val estimatedMaxFormatted = ksCurrency.format(estimatedMax, project, RoundingMode.HALF_UP)
+            return if (estimatedMinFormatted.isEmpty() || estimatedMaxFormatted.isEmpty()) {
+                EMPTY_STRING
+            } else {
+                ksString.format(
+                    context.getString(R.string.About_reward_amount),
+                    "reward_amount",
+                    "$estimatedMinFormatted-$estimatedMaxFormatted"
+                )
+            }
+        } else if (cost > 0) {
+            val costFormatted = ksCurrency.format(cost, project, RoundingMode.HALF_UP)
+            return costFormatted.ifEmpty {
+                EMPTY_STRING
+            }
+        } else {
+            return EMPTY_STRING
+        }
+    }
+
+    /**
+     * Return a string for the estimated shipping costs for a collection of
+     * Rewards (i.e. a base Reward + Add-Ons) for a given shipping rule.
+     *
+     * Ex. "About $10-$15" or "About $10-$15 each"
+     *
+     * Used for Add-On Cards (for now) and on the Checkout Screen.
+     */
+    fun getEstimatedShippingRange(
+        context: Context,
+        ksCurrency: KSCurrency,
+        ksString: KSString,
+        project: Project,
+        rewards: List<Reward> = listOf(),
+        selectedShippingRule: ShippingRule,
+        multipleQuantitiesAllowed: Boolean,
+        useUserPreference: Boolean,
+        useAbout: Boolean
+    ): String {
+        var min = ""
+        var max = ""
+        var minTotal = 0.0
+        var maxtotal = 0.0
+
+        rewards.forEach { reward ->
+            if (RewardUtils.isDigital(reward) || RewardUtils.isLocalPickup(reward) || !RewardUtils.isShippable(reward))
+                return@forEach
+
+            var shippingRule = reward.shippingRules()?.firstOrNull {
+                it.location()?.id() == selectedShippingRule.location()?.id()
+            }
+
+            if (shippingRule == null && RewardUtils.shipsWorldwide(reward))
+                shippingRule = reward.shippingRules()?.firstOrNull()
+
+            shippingRule?.let {
+                minTotal += (it.estimatedMin() * (reward.quantity() ?: 1))
+                maxtotal += (it.estimatedMax() * (reward.quantity() ?: 1))
+            }
+        }
+
+        if (minTotal <= 0 && maxtotal <= 0) return ""
+
+        min = if (useUserPreference) {
+            ksCurrency.formatWithUserPreference(minTotal, project, RoundingMode.HALF_UP, precision = 2)
+        } else {
+            ksCurrency.format(minTotal, project, RoundingMode.HALF_UP)
+        }
+        max = if (useUserPreference) {
+            ksCurrency.formatWithUserPreference(maxtotal, project, RoundingMode.HALF_UP, precision = 2)
+        } else {
+            ksCurrency.format(maxtotal, project, RoundingMode.HALF_UP)
+        }
+
+        if (min.isEmpty() || max.isEmpty()) return ""
+
+        // TODO: Replace with defined string
+        val minToMaxString = if (multipleQuantitiesAllowed) "$min-$max each" else "$min-$max"
+
+        return if (useAbout) {
+            ksString.format(
+                context.getString(R.string.About_reward_amount),
+                "reward_amount",
+                minToMaxString
+            )
+        } else {
+            minToMaxString
+        }
+    }
+
+    /**
+     * Returns a string for the shipping costs for add-on cards
+     *
+     * Ex. " + $5 each"
+     */
+    fun getAddOnShippingAmountString(
+        context: Context,
+        project: Project,
+        reward: Reward,
+        rewardShippingRules: List<ShippingRule>?,
+        ksCurrency: KSCurrency?,
+        ksString: KSString?,
+        selectedShippingRule: ShippingRule
+    ): String {
+        if (rewardShippingRules.isNullOrEmpty() || ksCurrency.isNull() || ksString.isNull()) return ""
+        val shippingAmount =
+            if (!RewardUtils.isDigital(reward) && RewardUtils.isShippable(reward) && !RewardUtils.isLocalPickup(reward)) {
+                var cost = 0.0
+                rewardShippingRules.filter {
+                    it.location()?.id() == selectedShippingRule.location()?.id()
+                }.map {
+                    cost += it.cost()
+                }
+                if (cost > 0) ksCurrency?.format(cost, project)
+                else ""
+            } else {
+                ""
+            }
+        if (shippingAmount.isNullOrEmpty()) return ""
+        val rewardAndShippingString =
+            context.getString(R.string.reward_amount_plus_shipping_cost_each)
+        val stringSections = rewardAndShippingString.split("+")
+        val shippingString = " +" + stringSections[1]
+        val ammountAndShippingString = ksString?.format(
+            shippingString,
+            "shipping_cost",
+            shippingAmount
+        )
+        return ammountAndShippingString ?: ""
+    }
+
+    fun getQuantityRemainingString(context: Context, ksString: KSString, reward: Reward): String {
+        val limit = reward.limit()
+        if (limit != null && limit > 0) { // Matches the web, and we don't know what a `limit` of `0` implies.
+            val remaining = reward.remaining()
+            if (remaining != null && remaining > 0) {
+                val remainingCountLeftOfLimitCountString = context.getString(R.string.remaining_count_left_of_limit_count)
+                return ksString.format(
+                    remainingCountLeftOfLimitCountString,
+                    "remaining_count",
+                    NumberUtils.format(remaining),
+                    "limit_count",
+                    NumberUtils.format(limit),
+                )
+            } else { // To match pre-existing UI behavior: hide the badge if the remaining quantity is <= 0.
+                return EMPTY_STRING
+            }
+        } else {
+            return EMPTY_STRING
+        }
+    }
+
+    /* Copied directly from RewardCarouselScreen.kt. Tested by RewardCarouselScreenTest.kt */
+    fun isRewardSelectable(reward: Reward, project: Project, selectedLocationId: Long?, backing: Backing?): Boolean {
+        return when {
+            RewardUtils.isNoReward(reward) -> true
+            reward.hasAddons() &&
+                backing?.rewardId() == reward.id() &&
+                (
+                    project.isLive ||
+                        (
+                            project.postCampaignPledgingEnabled() == true &&
+                                project.isInPostCampaignPledgingPhase() == true
+                            )
+                    ) -> true
+
+            !reward.isAvailable() -> false
+
+            !RewardUtils.isShippableToLocation(reward, selectedLocationId) -> false
+
+            !reward.hasAddons() && backing?.isBacked(reward) != true -> true
+
+            backing?.rewardId() != reward.id() &&
+                RewardUtils.isAvailableForProject(project, reward) -> true
+
+            else -> false
+        }
     }
 }

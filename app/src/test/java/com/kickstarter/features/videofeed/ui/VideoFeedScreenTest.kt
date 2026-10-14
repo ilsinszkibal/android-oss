@@ -1,0 +1,914 @@
+package com.kickstarter.features.videofeed.ui
+
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
+import com.kickstarter.KSRobolectricTestCase
+import com.kickstarter.features.videofeed.data.KSVideoBadgeType
+import com.kickstarter.features.videofeed.data.VideoFeedItem
+import com.kickstarter.features.videofeed.ui.components.KSVideoActionsColumnTestTag
+import com.kickstarter.features.videofeed.ui.components.KSVideoBadgesRowTestTag
+import com.kickstarter.features.videofeed.ui.components.KSVideoCampaignCardTestTag
+import com.kickstarter.libs.RefTag
+import com.kickstarter.mock.factories.ProjectFactory
+import com.kickstarter.models.Photo
+import com.kickstarter.models.Project
+import com.kickstarter.ui.compose.designsystem.KSTheme
+import com.kickstarter.ui.compose.designsystem.videoplayer.KSVideoPlayerTestTag
+import org.junit.Test
+import org.robolectric.annotation.Config
+
+// Render at a realistic phone size so the bottom-anchored overlay (action rail, badges, campaign
+// card) lays out below the top controls instead of overflowing upward in Robolectric's small
+// default window — otherwise the rail floats up under the top-right HideUI toggle.
+@Config(qualifiers = "w411dp-h891dp")
+class VideoFeedScreenTest : KSRobolectricTestCase() {
+
+    private val hlsUrl = "https://ksr-video.imgix.net/projects/3275127/video-865539-hls_playlist.m3u8"
+
+    @Test
+    fun `VideoFeedScreen displays pager and verifies beyondViewportPageCount and key usage`() {
+        val project1Id = 101L
+        val project2Id = 102L
+        val project3Id = 103L
+
+        val items = listOf(
+            VideoFeedItem(
+                badges = listOf(KSVideoBadgeType.ProjectWeLove),
+                project = ProjectFactory.project().toBuilder().id(project1Id).build(),
+                hlsUrl = hlsUrl
+            ),
+            VideoFeedItem(
+                badges = listOf(KSVideoBadgeType.JustLaunched),
+                project = ProjectFactory.caProject().toBuilder().id(project2Id).build(),
+                hlsUrl = hlsUrl
+            ),
+            VideoFeedItem(
+                badges = listOf(KSVideoBadgeType.Trending),
+                project = ProjectFactory.ukProject().toBuilder().id(project3Id).build(),
+                hlsUrl = hlsUrl
+            )
+        )
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(), items = items
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(VideoFeedScreenTestTag.VIDEO_FEED_PAGER.name)
+            .assertExists()
+
+        // Page 0 is in the tree and associated with correct Project ID (key test), and displayed
+        composeTestRule.onNodeWithTag("${VideoFeedScreenTestTag.VIDEO_FEED_OVERLAY_CONTAINER.name}_$project1Id", useUnmergedTree = true)
+            .assertExists()
+            .assertIsDisplayed()
+
+        // beyondViewportPageCount = 1: Page 1 should exist in composition, not yet displayed
+        composeTestRule.onNodeWithTag("${VideoFeedScreenTestTag.VIDEO_FEED_OVERLAY_CONTAINER.name}_$project2Id", useUnmergedTree = true)
+            .assertExists()
+            .assertIsNotDisplayed()
+
+        // Page 2 does NOT exist (it's beyond the viewport + 1)
+        composeTestRule.onNodeWithTag("${VideoFeedScreenTestTag.VIDEO_FEED_OVERLAY_CONTAINER.name}_$project3Id", useUnmergedTree = true)
+            .assertDoesNotExist()
+
+        composeTestRule.onNodeWithTag(VideoFeedScreenTestTag.VIDEO_FEED_PAGER.name)
+            .performTouchInput { swipeUp() }
+        composeTestRule.waitForIdle()
+
+        // Page 1 exists and displayed
+        composeTestRule.onNodeWithTag("${VideoFeedScreenTestTag.VIDEO_FEED_OVERLAY_CONTAINER.name}_$project2Id", useUnmergedTree = true)
+            .assertExists()
+            .assertIsDisplayed()
+
+        // Page 0 still exists (1 page behind) and not displayed
+        composeTestRule.onNodeWithTag("${VideoFeedScreenTestTag.VIDEO_FEED_OVERLAY_CONTAINER.name}_$project1Id", useUnmergedTree = true)
+            .assertExists()
+            .assertIsNotDisplayed()
+
+        // Page 2 now exists (1 page ahead)
+        composeTestRule.onNodeWithTag("${VideoFeedScreenTestTag.VIDEO_FEED_OVERLAY_CONTAINER.name}_$project3Id", useUnmergedTree = true)
+            .assertExists()
+            .assertIsNotDisplayed()
+    }
+
+    @Test
+    fun `close button is displayed with correct accessibility role`() {
+        val project = ProjectFactory.project().toBuilder().id(201L).build()
+        val items = listOf(
+            VideoFeedItem(badges = emptyList(), project = project, hlsUrl = hlsUrl)
+        )
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(), items = items
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("${VideoFeedScreenTestTag.VIDEO_FEED_CLOSE_BUTTON.name}_${project.id()}")
+            .assertIsDisplayed()
+            .assert(
+                SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)
+            )
+    }
+
+    @Test
+    fun `close button triggers onClose callback`() {
+        var closeCalled = false
+        val project = ProjectFactory.project().toBuilder().id(301L).build()
+        val items = listOf(
+            VideoFeedItem(badges = emptyList(), project = project, hlsUrl = hlsUrl)
+        )
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    onClose = { closeCalled = true }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("${VideoFeedScreenTestTag.VIDEO_FEED_CLOSE_BUTTON.name}_${project.id()}")
+            .performClick()
+
+        assertTrue(closeCalled)
+    }
+
+    @Test
+    fun `each page has its own close button`() {
+        val project1Id = 401L
+        val project2Id = 402L
+
+        val items = listOf(
+            VideoFeedItem(
+                badges = emptyList(),
+                project = ProjectFactory.project().toBuilder().id(project1Id).build(),
+                hlsUrl = hlsUrl
+            ),
+            VideoFeedItem(
+                badges = emptyList(),
+                project = ProjectFactory.caProject().toBuilder().id(project2Id).build(),
+                hlsUrl = hlsUrl
+            )
+        )
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(), items = items
+                )
+            }
+        }
+
+        // Page 0 close button is displayed
+        composeTestRule.onNodeWithTag("${VideoFeedScreenTestTag.VIDEO_FEED_CLOSE_BUTTON.name}_$project1Id", useUnmergedTree = true)
+            .assertExists()
+            .assertIsDisplayed()
+
+        // Page 1 close button exists (beyondViewportPageCount = 1) but is not displayed
+        composeTestRule.onNodeWithTag("${VideoFeedScreenTestTag.VIDEO_FEED_CLOSE_BUTTON.name}_$project2Id", useUnmergedTree = true)
+            .assertExists()
+            .assertIsNotDisplayed()
+
+        // Swipe to page 1
+        composeTestRule.onNodeWithTag(VideoFeedScreenTestTag.VIDEO_FEED_PAGER.name)
+            .performTouchInput { swipeUp() }
+        composeTestRule.waitForIdle()
+
+        // Page 1 close button is now displayed
+        composeTestRule.onNodeWithTag("${VideoFeedScreenTestTag.VIDEO_FEED_CLOSE_BUTTON.name}_$project2Id", useUnmergedTree = true)
+            .assertExists()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `profile button triggers onProfileClick with the current page project`() {
+        var capturedProject: Project? = null
+
+        val project = ProjectFactory.project().toBuilder().id(901L).build()
+        val items = listOf(VideoFeedItem(badges = emptyList(), project = project, hlsUrl = hlsUrl))
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    onProfileClick = { p, _ -> capturedProject = p }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(KSVideoActionsColumnTestTag.PROFILE_BUTTON.name, useUnmergedTree = true)
+            .performClick()
+
+        assertEquals(project, capturedProject)
+    }
+
+    @Test
+    fun `profile button on second page passes the correct project`() {
+        var capturedProject: Project? = null
+
+        val project1 = ProjectFactory.project().toBuilder().id(902L).build()
+        val project2 = ProjectFactory.caProject().toBuilder().id(903L).build()
+        val items = listOf(
+            VideoFeedItem(badges = emptyList(), project = project1, hlsUrl = hlsUrl),
+            VideoFeedItem(badges = emptyList(), project = project2, hlsUrl = hlsUrl)
+        )
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    onProfileClick = { p, _ -> capturedProject = p }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(VideoFeedScreenTestTag.VIDEO_FEED_PAGER.name)
+            .performTouchInput { swipeUp() }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("${VideoFeedScreenTestTag.VIDEO_FEED_OVERLAY_CONTAINER.name}_${project2.id()}", useUnmergedTree = true)
+            .assertIsDisplayed()
+
+        composeTestRule.onNode(
+            hasTestTag(KSVideoActionsColumnTestTag.PROFILE_BUTTON.name)
+                .and(hasAnyAncestor(hasTestTag("${VideoFeedScreenTestTag.VIDEO_FEED_OVERLAY_CONTAINER.name}_${project2.id()}"))),
+            useUnmergedTree = true
+        ).performClick()
+
+        assertEquals(project2, capturedProject)
+    }
+
+    @Test
+    fun `back button triggers projectCallback for a live project`() {
+        var capturedProject: Project? = null
+        var capturedRefTag: RefTag? = null
+
+        val project = ProjectFactory.project().toBuilder().id(501L).build()
+        val items = listOf(VideoFeedItem(badges = emptyList(), project = project, hlsUrl = hlsUrl))
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    projectCallback = { p, ref ->
+                        capturedProject = p
+                        capturedRefTag = ref
+                    }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(KSVideoCampaignCardTestTag.BUTTON.name, useUnmergedTree = true)
+            .performClick()
+
+        assertEquals(project, capturedProject)
+        assertEquals(RefTag.videoFeed(), capturedRefTag)
+    }
+
+    @Test
+    fun `back button triggers preLaunchedCallback for a pre-launch project`() {
+        var capturedProject: Project? = null
+        var capturedRefTag: RefTag? = null
+
+        val project = ProjectFactory.prelaunchProject("pre-launch-slug").toBuilder().id(601L).build()
+        val items = listOf(VideoFeedItem(badges = emptyList(), project = project, hlsUrl = hlsUrl))
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    preLaunchedCallback = { p, ref ->
+                        capturedProject = p
+                        capturedRefTag = ref
+                    }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(KSVideoCampaignCardTestTag.BUTTON.name, useUnmergedTree = true)
+            .performClick()
+
+        assertEquals(project, capturedProject)
+        assertEquals(RefTag.videoFeed(), capturedRefTag)
+    }
+
+    @Test
+    fun `back button does not trigger preLaunchedCallback for a live project`() {
+        var preLaunchedCalled = false
+
+        val project = ProjectFactory.project().toBuilder().id(701L).build()
+        val items = listOf(VideoFeedItem(badges = emptyList(), project = project, hlsUrl = hlsUrl))
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    preLaunchedCallback = { _, _ -> preLaunchedCalled = true }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(KSVideoCampaignCardTestTag.BUTTON.name, useUnmergedTree = true)
+            .performClick()
+
+        assertFalse(preLaunchedCalled)
+    }
+
+    @Test
+    fun `back button does not trigger projectCallback for a pre-launch project`() {
+        var projectCallbackCalled = false
+
+        val project = ProjectFactory.prelaunchProject("pre-launch-slug").toBuilder().id(801L).build()
+        val items = listOf(VideoFeedItem(badges = emptyList(), project = project, hlsUrl = hlsUrl))
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    projectCallback = { _, _ -> projectCallbackCalled = true }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(KSVideoCampaignCardTestTag.BUTTON.name, useUnmergedTree = true)
+            .performClick()
+
+        assertFalse(projectCallbackCalled)
+    }
+
+    @Test
+    fun `bookmark button triggers onBookmarkClick with the current page project`() {
+        var capturedProject: Project? = null
+
+        val project = ProjectFactory.project().toBuilder().id(1001L).build()
+        val items = listOf(VideoFeedItem(badges = emptyList(), project = project, hlsUrl = hlsUrl))
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    onBookmarkClick = { p, _, _ -> capturedProject = p }
+                )
+            }
+        }
+
+        composeTestRule.onNode(
+            hasTestTag(KSVideoActionsColumnTestTag.BOOKMARK_BUTTON.name)
+                .and(hasAnyAncestor(hasTestTag("${VideoFeedScreenTestTag.VIDEO_FEED_OVERLAY_CONTAINER.name}_${project.id()}"))),
+            useUnmergedTree = true
+        ).performClick()
+
+        assertEquals(project, capturedProject)
+    }
+
+    @Test
+    fun `bookmark button passes the correct page index`() {
+        var capturedIndex: Int? = null
+
+        val project1 = ProjectFactory.project().toBuilder().id(1101L).build()
+        val project2 = ProjectFactory.caProject().toBuilder().id(1102L).build()
+        val items = listOf(
+            VideoFeedItem(badges = emptyList(), project = project1, hlsUrl = hlsUrl),
+            VideoFeedItem(badges = emptyList(), project = project2, hlsUrl = hlsUrl)
+        )
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    onBookmarkClick = { _, _, index -> capturedIndex = index }
+                )
+            }
+        }
+
+        composeTestRule.onNode(
+            hasTestTag(KSVideoActionsColumnTestTag.BOOKMARK_BUTTON.name)
+                .and(hasAnyAncestor(hasTestTag("${VideoFeedScreenTestTag.VIDEO_FEED_OVERLAY_CONTAINER.name}_${project1.id()}"))),
+            useUnmergedTree = true
+        ).performClick()
+        assertEquals(0, capturedIndex)
+
+        composeTestRule.onNodeWithTag(VideoFeedScreenTestTag.VIDEO_FEED_PAGER.name)
+            .performTouchInput { swipeUp() }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNode(
+            hasTestTag(KSVideoActionsColumnTestTag.BOOKMARK_BUTTON.name)
+                .and(hasAnyAncestor(hasTestTag("${VideoFeedScreenTestTag.VIDEO_FEED_OVERLAY_CONTAINER.name}_${project2.id()}"))),
+            useUnmergedTree = true
+        ).performClick()
+        assertEquals(1, capturedIndex)
+    }
+
+    @Test
+    fun `bookmark button on second page passes the correct project`() {
+        var capturedProject: Project? = null
+
+        val project1 = ProjectFactory.project().toBuilder().id(1002L).build()
+        val project2 = ProjectFactory.caProject().toBuilder().id(1003L).build()
+        val items = listOf(
+            VideoFeedItem(badges = emptyList(), project = project1, hlsUrl = hlsUrl),
+            VideoFeedItem(badges = emptyList(), project = project2, hlsUrl = hlsUrl)
+        )
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    onBookmarkClick = { p, _, _ -> capturedProject = p }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(VideoFeedScreenTestTag.VIDEO_FEED_PAGER.name)
+            .performTouchInput { swipeUp() }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNode(
+            hasTestTag(KSVideoActionsColumnTestTag.BOOKMARK_BUTTON.name)
+                .and(hasAnyAncestor(hasTestTag("${VideoFeedScreenTestTag.VIDEO_FEED_OVERLAY_CONTAINER.name}_${project2.id()}"))),
+            useUnmergedTree = true
+        ).performClick()
+
+        assertEquals(project2, capturedProject)
+    }
+
+    @Test
+    fun `onLoadMore is triggered when current page reaches the load threshold`() {
+        var loadMoreCallCount = 0
+
+        // With 4 items, threshold = items.size - 3 = 1, so page 0 does NOT trigger, page 1 does
+        val items = List(4) { i ->
+            VideoFeedItem(
+                badges = emptyList(),
+                project = ProjectFactory.project().toBuilder().id((2000L + i)).build(),
+                hlsUrl = hlsUrl
+            )
+        }
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    onLoadMore = { loadMoreCallCount++ }
+                )
+            }
+        }
+
+        composeTestRule.waitForIdle()
+        assertEquals(0, loadMoreCallCount)
+
+        composeTestRule.onNodeWithTag(VideoFeedScreenTestTag.VIDEO_FEED_PAGER.name)
+            .performTouchInput { swipeUp() }
+        composeTestRule.waitForIdle()
+
+        assertTrue(loadMoreCallCount > 0)
+    }
+
+    @Test
+    fun `onLoadMore is triggered immediately when items count is within threshold`() {
+        var loadMoreCalled = false
+
+        // With 3 items, threshold = items.size - 3 = 0, so page 0 triggers immediately
+        val items = List(3) { i ->
+            VideoFeedItem(
+                badges = emptyList(),
+                project = ProjectFactory.project().toBuilder().id((3000L + i)).build(),
+                hlsUrl = hlsUrl
+            )
+        }
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    onLoadMore = { loadMoreCalled = true }
+                )
+            }
+        }
+
+        composeTestRule.waitForIdle()
+        assertTrue(loadMoreCalled)
+    }
+
+    @Test
+    fun `pagination loading page is shown at the end when isLoading and hasMore are true`() {
+        val project = ProjectFactory.project().toBuilder().id(8001L).build()
+        val items = listOf(VideoFeedItem(badges = emptyList(), project = project, hlsUrl = hlsUrl))
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    hasMore = true,
+                    isLoading = true
+                )
+            }
+        }
+
+        // The loading page is the trailing page; it exists in composition (beyondViewportPageCount = 1)
+        // but is not displayed until the user swipes past the last video.
+        composeTestRule.onNodeWithTag(VideoFeedScreenTestTag.VIDEO_FEED_LOADING_PAGE.name, useUnmergedTree = true)
+            .assertExists()
+            .assertIsNotDisplayed()
+
+        composeTestRule.onNodeWithTag(VideoFeedScreenTestTag.VIDEO_FEED_PAGER.name)
+            .performTouchInput { swipeUp() }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(VideoFeedScreenTestTag.VIDEO_FEED_LOADING_PAGE.name, useUnmergedTree = true)
+            .assertExists()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `pagination loading page is not shown when isLoading is false`() {
+        val project = ProjectFactory.project().toBuilder().id(8002L).build()
+        val items = listOf(VideoFeedItem(badges = emptyList(), project = project, hlsUrl = hlsUrl))
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    hasMore = true,
+                    isLoading = false
+                )
+            }
+        }
+
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(VideoFeedScreenTestTag.VIDEO_FEED_LOADING_PAGE.name, useUnmergedTree = true)
+            .assertDoesNotExist()
+    }
+
+    @Test
+    fun `pagination loading page is not shown when there are no more pages`() {
+        val project = ProjectFactory.project().toBuilder().id(8003L).build()
+        val items = listOf(VideoFeedItem(badges = emptyList(), project = project, hlsUrl = hlsUrl))
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    hasMore = false,
+                    isLoading = true
+                )
+            }
+        }
+
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(VideoFeedScreenTestTag.VIDEO_FEED_LOADING_PAGE.name, useUnmergedTree = true)
+            .assertDoesNotExist()
+    }
+
+    @Test
+    fun `error snackbar is displayed when errorSnackBarHostState receives a message`() {
+        val snackbarHostState = SnackbarHostState()
+        val errorMessage = "Something went wrong, please try again"
+        val project = ProjectFactory.project().toBuilder().id(4001L).build()
+        val items = listOf(VideoFeedItem(badges = emptyList(), project = project, hlsUrl = hlsUrl))
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    errorSnackBarHostState = snackbarHostState
+                )
+                LaunchedEffect(Unit) {
+                    snackbarHostState.showSnackbar(message = errorMessage)
+                }
+            }
+        }
+
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText(errorMessage).assertIsDisplayed()
+    }
+
+    @Test
+    fun `snackbar is positioned in the top half of the screen`() {
+        val snackbarHostState = SnackbarHostState()
+        val errorMessage = "Couldn't load video"
+        val project = ProjectFactory.project().toBuilder().id(4002L).build()
+        val items = listOf(VideoFeedItem(badges = emptyList(), project = project, hlsUrl = hlsUrl))
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    errorSnackBarHostState = snackbarHostState
+                )
+                LaunchedEffect(Unit) {
+                    snackbarHostState.showSnackbar(message = errorMessage)
+                }
+            }
+        }
+
+        composeTestRule.waitForIdle()
+
+        val snackbarNode = composeTestRule.onNodeWithText(errorMessage)
+        snackbarNode.assertIsDisplayed()
+
+        val snackbarBounds = snackbarNode.fetchSemanticsNode().boundsInRoot
+        val screenHeight = composeTestRule.onNodeWithTag(VideoFeedScreenTestTag.VIDEO_FEED_PAGER.name)
+            .fetchSemanticsNode().boundsInRoot.height
+
+        assertTrue("Snackbar should be in the top half of the screen", snackbarBounds.top < screenHeight / 2)
+    }
+
+    @Test
+    fun `VideoFeedScreen renders without crash when items list is empty`() {
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(), items = emptyList()
+                )
+            }
+        }
+
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(VideoFeedScreenTestTag.VIDEO_FEED_PAGER.name).assertExists()
+    }
+
+    @Test
+    fun `share button triggers onShareCTAClick with the current project`() {
+        var capturedProject: Project? = null
+
+        val project = ProjectFactory.project().toBuilder().id(5001L).build()
+        val items = listOf(VideoFeedItem(badges = emptyList(), project = project, hlsUrl = hlsUrl))
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    onShareCTAClick = { p, _ -> capturedProject = p }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(KSVideoActionsColumnTestTag.SHARE_BUTTON.name, useUnmergedTree = true)
+            .performClick()
+
+        assertEquals(project, capturedProject)
+    }
+
+    @Test
+    fun `onReachedLastVideo is triggered when settled on last page and hasMore is false`() {
+        var reachedLastVideoCalled = false
+
+        val items = List(2) { i ->
+            VideoFeedItem(
+                badges = emptyList(),
+                project = ProjectFactory.project().toBuilder().id(6000L + i).build(),
+                hlsUrl = hlsUrl
+            )
+        }
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    hasMore = false,
+                    onReachedLastVideo = { reachedLastVideoCalled = true }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(VideoFeedScreenTestTag.VIDEO_FEED_PAGER.name)
+            .performTouchInput { swipeUp() }
+        composeTestRule.waitForIdle()
+
+        assertTrue(reachedLastVideoCalled)
+    }
+
+    @Test
+    fun `onReachedLastVideo fires only once even when the LaunchedEffect re-evaluates`() {
+        var callCount = 0
+        var hasMore by mutableStateOf(false)
+
+        val items = List(2) { i ->
+            VideoFeedItem(
+                badges = emptyList(),
+                project = ProjectFactory.project().toBuilder().id(7000L + i).build(),
+                hlsUrl = hlsUrl
+            )
+        }
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    hasMore = hasMore,
+                    onReachedLastVideo = { callCount++ }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(VideoFeedScreenTestTag.VIDEO_FEED_PAGER.name)
+            .performTouchInput { swipeUp() }
+        composeTestRule.waitForIdle()
+
+        assertEquals(1, callCount)
+
+        // Toggle hasMore to force the LaunchedEffect to re-run with the same end-of-feed condition
+        hasMore = true
+        composeTestRule.waitForIdle()
+        hasMore = false
+        composeTestRule.waitForIdle()
+
+        // Guard (hasTriggeredReview) ensures the callback only fires once per session
+        assertEquals(1, callCount)
+    }
+
+    @Test
+    fun `share button passes project photo url as share image`() {
+        val photoUrl = "https://example.com/cover.jpg"
+        val photo = Photo.builder().full(photoUrl).build()
+        val project = ProjectFactory.project()
+            .toBuilder()
+            .id(5002L)
+            .photo(photo)
+            .build()
+        val items = listOf(VideoFeedItem(badges = emptyList(), project = project, hlsUrl = hlsUrl))
+
+        var shareImageUrl: String? = null
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    onShareCTAClick = { p, _ -> shareImageUrl = p.photo()?.full() }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(KSVideoActionsColumnTestTag.SHARE_BUTTON.name, useUnmergedTree = true)
+            .performClick()
+
+        assertEquals(photoUrl, shareImageUrl)
+    }
+
+    @Test
+    fun `HideUI toggle hides the action rail, badges and campaign details but keeps close, toggle and back button`() {
+        val project = ProjectFactory.project().toBuilder().id(11001L).build()
+        val items = listOf(
+            VideoFeedItem(badges = listOf(KSVideoBadgeType.ProjectWeLove), project = project, hlsUrl = hlsUrl)
+        )
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(environment = environment(), items = items)
+            }
+        }
+
+        // - Chrome is visible by default
+        composeTestRule.onNodeWithTag(KSVideoActionsColumnTestTag.COLUMN_CONTAINER.name, useUnmergedTree = true)
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithTag(KSVideoBadgesRowTestTag.BADGES_ROW_CONTAINER.name, useUnmergedTree = true)
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithTag(KSVideoCampaignCardTestTag.TITLE_SUBTITLE_CONTAINER.name, useUnmergedTree = true)
+            .assertIsDisplayed()
+
+        // - Enable HideUI
+        composeTestRule.onNodeWithTag("${VideoFeedScreenTestTag.VIDEO_FEED_HIDE_UI_BUTTON.name}_${project.id()}")
+            .performClick()
+        composeTestRule.waitForIdle()
+
+        // - The action rail, badges and campaign details are gone
+        composeTestRule.onNodeWithTag(KSVideoActionsColumnTestTag.COLUMN_CONTAINER.name, useUnmergedTree = true)
+            .assertDoesNotExist()
+        composeTestRule.onNodeWithTag(KSVideoBadgesRowTestTag.BADGES_ROW_CONTAINER.name, useUnmergedTree = true)
+            .assertDoesNotExist()
+        composeTestRule.onNodeWithTag(KSVideoCampaignCardTestTag.TITLE_SUBTITLE_CONTAINER.name, useUnmergedTree = true)
+            .assertDoesNotExist()
+
+        // - Close, HideUI toggle and the Back button remain
+        composeTestRule.onNodeWithTag("${VideoFeedScreenTestTag.VIDEO_FEED_CLOSE_BUTTON.name}_${project.id()}")
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithTag("${VideoFeedScreenTestTag.VIDEO_FEED_HIDE_UI_BUTTON.name}_${project.id()}")
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithTag(KSVideoCampaignCardTestTag.BUTTON.name, useUnmergedTree = true)
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `mute button appears with the controls and toggles between mute and unmute labels`() {
+        val project = ProjectFactory.project().toBuilder().id(12001L).build()
+        val items = listOf(VideoFeedItem(badges = emptyList(), project = project, hlsUrl = hlsUrl))
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(environment = environment(), items = items)
+            }
+        }
+
+        // - While playing, the mute button is hidden along with the play/pause controls.
+        composeTestRule.onNodeWithContentDescription("Mute", useUnmergedTree = true)
+            .assertDoesNotExist()
+
+        // - Tapping the video reveals the controls; videos start unmuted, so the action is "Mute".
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_SURFACE.name).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithContentDescription("Mute", useUnmergedTree = true)
+            .assertIsDisplayed()
+            .performClick()
+        composeTestRule.waitForIdle()
+
+        // - After tapping it is muted, so the button's action becomes "Unmute".
+        composeTestRule.onNodeWithContentDescription("Unmute", useUnmergedTree = true)
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `mute toggle reports the project, video id and resulting mute state`() {
+        var capturedProject: Project? = null
+        var capturedVideoId: Long? = null
+        var capturedMuted: Boolean? = null
+
+        val videoId = 44444L
+        val project = ProjectFactory.project().toBuilder().id(12004L).build()
+        val items = listOf(VideoFeedItem(badges = emptyList(), project = project, hlsUrl = hlsUrl, videoId = videoId))
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(
+                    environment = environment(),
+                    items = items,
+                    onMuteToggleTap = { p, id, muted ->
+                        capturedProject = p
+                        capturedVideoId = id
+                        capturedMuted = muted
+                    }
+                )
+            }
+        }
+
+        // - Reveal the controls, then tap mute (starts unmuted, so this mutes it).
+        composeTestRule.onNodeWithTag(KSVideoPlayerTestTag.VIDEO_PLAYER_SURFACE.name).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithContentDescription("Mute", useUnmergedTree = true)
+            .performClick()
+
+        assertEquals(project, capturedProject)
+        assertEquals(videoId, capturedVideoId)
+        assertEquals(true, capturedMuted)
+    }
+
+    @Test
+    fun `HideUI toggle button is displayed with a button role`() {
+        val project = ProjectFactory.project().toBuilder().id(11002L).build()
+        val items = listOf(VideoFeedItem(badges = emptyList(), project = project, hlsUrl = hlsUrl))
+
+        composeTestRule.setContent {
+            KSTheme {
+                VideoFeedScreen(environment = environment(), items = items)
+            }
+        }
+
+        composeTestRule.onNodeWithTag("${VideoFeedScreenTestTag.VIDEO_FEED_HIDE_UI_BUTTON.name}_${project.id()}")
+            .assertIsDisplayed()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+    }
+}

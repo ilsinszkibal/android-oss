@@ -3,7 +3,7 @@ package com.kickstarter.models
 import com.kickstarter.mock.factories.UserFactory
 import junit.framework.TestCase
 
-class UserTest: TestCase() {
+class UserTest : TestCase() {
     fun testEquals_whenSecondUserNull_returnFalse() {
         val userA = UserFactory.user()
         val userB: User? = null
@@ -42,6 +42,13 @@ class UserTest: TestCase() {
     fun testEquals_whenIsAdminIsDifferent_returnFalse() {
         val locA = UserFactory.user().toBuilder().isAdmin(false).build()
         val locB = UserFactory.user().toBuilder().isAdmin(true).build()
+
+        assertFalse(locA == locB)
+    }
+
+    fun testEquals_whenNeedPasswordIsDifferent_returnFalse() {
+        val locA = UserFactory.user().toBuilder().needsPassword(false).build()
+        val locB = UserFactory.user().toBuilder().needsPassword(true).build()
 
         assertFalse(locA == locB)
     }

@@ -1,0 +1,40 @@
+query GetShippingRulesForRewardId($rewardId: ID!) {
+    node(id: $rewardId) {
+        ... on Reward {
+            id
+            name
+            shippingRulesExpanded {
+                nodes {
+                    ... shippingRule
+                }
+            }
+        }
+    }
+}
+
+query GetRewardAllowedAddOns($locationId: ID! , $rewardImageWidth: Int = 1024, $rewardId: ID!, $first: Int = 5, $cursor: String) {
+    node(id: $rewardId) {
+        ... on Reward {
+            allowedAddons(first: $first, after:$cursor) {
+                edges {
+                    cursor
+                    node {
+                        shippingRulesExpanded(forLocation: $locationId) {
+                            nodes {
+                                ... shippingRule
+                            }
+                        }
+                        ... reward
+                        items {
+                            ... rewardItems
+                        }
+                        ...rewardImage
+                    }
+                }
+                pageInfo {
+                    ... pageInfo
+                }
+            }
+        }
+    }
+}

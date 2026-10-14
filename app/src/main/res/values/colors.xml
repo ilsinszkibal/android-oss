@@ -9,6 +9,10 @@
   <color name="window_background">@color/kds_white</color>
   <color name="status_bar">@color/kds_support_100</color>
 
+  <!-- KRS  -->
+  <color name="ksr_legacy_grey_300">#F0F0F0</color>
+  <color name="ksr_legacy_dark_grey_500">#656969</color>
+
   <!-- KDS  -->
   <color name="kds_alert">#A12027</color>
   <color name="kds_black">@android:color/black</color>
@@ -34,6 +38,7 @@
   <color name="kds_trust_700">#0A007D</color>
   <color name="kds_warn">#F9D66D</color>
   <color name="kds_white">@android:color/white</color>
+  <color name="kds_legacy_grey_500">#DCDEDD</color>
 
   <!-- Colors with hex opacity:
     http://stackoverflow.com/questions/5445085/understanding-colors-in-android-6-characters/11019879#11019879 -->
@@ -54,7 +59,9 @@
   <color name="green_alpha_50">#80009E74</color>
   <color name="green_darken_10">@color/soft_black_alpha_17</color>
   <color name="soft_black_alpha_17">#2B282828</color>
+  <color name="soft_black">#282828</color>
   <color name="white_alpha_60">#99ffffff</color>
+  <color name="soft_grey_disable">#9B9E9E</color>
 
   <!-- Click colors -->
   <color name="dark_gray_click">@color/ripple_light</color>
@@ -71,4 +78,13 @@
 
   <!-- Third-party colors -->
   <color name="facebook_blue">#1877F2</color>
+
+  <color name="retry_color">#FF5151</color>
+
+  <!-- comments -->
+  <color name="comment_background">#FBFBFA</color>
+
+  <!-- Other  -->
+  <color name="text_disabled">#B3B3B3</color>
+
 </resources>

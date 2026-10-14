@@ -1,3 +1,87 @@
+query FetchProjects(
+  $first: Int = 15,
+  $cursor: String,
+  $sort: ProjectSort,
+  $state: PublicProjectState,
+  $backed: Boolean,
+  $recommended: Boolean,
+  $categoryId: String,
+  $starred: Boolean,
+  $staffPicks: Boolean,
+  $searchTerm: String,
+  $raised: RaisedBuckets,
+  $location: ID,
+  $amountRaisedBucket: PledgedBuckets,
+  $goalBucket: GoalBuckets
+  $following: Boolean
+  $tagId: Int
+) {
+    projects(
+      first: $first,
+      after:$cursor,
+      sort: $sort,
+      backed:$backed,
+      recommended:$recommended,
+      categoryId: $categoryId,
+      starred:$starred,
+      state: $state,
+      staffPicks: $staffPicks,
+      term: $searchTerm,
+      raised: $raised,
+      locationId: $location,
+      pledged: $amountRaisedBucket,
+      goal: $goalBucket,
+      following: $following,
+      tagId: $tagId
+      ) {
+        edges {
+          cursor
+          node{
+            ... projectCard
+          }
+        }
+        pageInfo {
+          ... pageInfo
+        }
+        totalCount
+    }
+}
+
+query FetchProject($slug: String!, $rewardImageWidth: Int = 1024) {
+  project(slug: $slug) {
+    ... fullProject
+  }
+}
+
+query FetchProjectRewards($slug: String!, $rewardImageWidth: Int = 1024, $sort: ProjectRewardsSort = ELIGIBILITY) {
+  project(slug: $slug) {
+    minPledge
+    rewards(sort: $sort) {
+      nodes {
+        id
+        ... reward
+        allowedAddons {
+            pageInfo {
+                startCursor
+            }
+        }
+        items {
+            ... rewardItems
+        }
+        simpleShippingRulesExpanded {
+          cost
+          country
+          estimatedMax
+          estimatedMin
+          locationId
+          locationName
+        }
+        ...rewardImage
+      }
+    }
+  }
+}
+
 query ProjectCreatorDetails($slug: String!) {
   project(slug: $slug) {
     creator {
@@ -9,7 +93,7 @@ query ProjectCreatorDetails($slug: String!) {
   }
 }
 
-query GetProjectBacking($slug: String!) {
+query GetProjectBacking($slug: String!, $rewardImageWidth: Int = 1024) {
   project(slug: $slug) {
     id
     backing {
@@ -18,7 +102,7 @@ query GetProjectBacking($slug: String!) {
   }
 }
 
-query GetProjectAddOns($slug: String!, $locationId: ID!) {
+query GetProjectAddOns($slug: String!, $locationId: ID!, $rewardImageWidth: Int = 1024) {
   project(slug: $slug) {
     addOns {
       nodes {
@@ -28,6 +112,193 @@ query GetProjectAddOns($slug: String!, $locationId: ID!) {
           }
         }
         ... reward
+        items {
+          ... rewardItems
+        }
+        ...rewardImage
+      }
+    }
+  }
+}
+
+mutation CreateComment($body: String!, $commentableId: ID!, $parentId: ID, $clientMutationId: String) {
+  createComment(input: {
+    body: $body,
+    commentableId: $commentableId,
+    parentId: $parentId,
+    clientMutationId: $clientMutationId
+  }) {
+    comment {
+      ...comment
+    }
+  }
+}
+
+mutation watchProject($id: ID!, $rewardImageWidth: Int = 1024) {
+  watchProject(input: {id: $id}) {
+    clientMutationId
+    project {
+      ...fullProject
+    }
+  }
+}
+
+mutation unwatchProject($id: ID!, $rewardImageWidth: Int = 1024) {
+  watchProject: unwatchProject(input: {id: $id}) {
+    clientMutationId
+    project {
+      ...fullProject
+    }
+  }
+}
+
+
+query GetProjectComments($slug: String!, $limit: Int!, $cursor: String) {
+  project(slug: $slug) {
+    id
+    collaborators {
+      edges {
+        node {
+          id
+          name
+        }
+      }
+    }
+    comments(first: $limit, after: $cursor) {
+      edges {
+        cursor
+        node {
+          ...comment
+        }
+      }
+      pageInfo {
+        ...pageInfo
+      }
+      totalCount
+    }
+  }
+}
+
+query GetProjectUpdateComments($id: ID!,$limit: Int!, $cursor: String){
+  post(id: $id)  {
+    id
+    ...freeformPost
+  }
+}
+
+query GetRootCategories {
+  rootCategories {
+    ...category
+    subcategories {
+      nodes {
+        ...category
+      }
+    }
+  }
+}
+
+query FetchCategory($categoryParam: String!) {
+  category(param: $categoryParam){
+    ...category
+    subcategories {
+      nodes {
+        ...category
+      }
+    }
+  }
+}
+
+query GetProjectUpdates($slug: String!, $limit: Int!, $cursor: String) {
+  project(slug: $slug) {
+    posts(first: $limit, after: $cursor) {
+      edges {
+        node {
+          ...post
+        }
+        cursor
+      }
+      pageInfo {
+        ...pageInfo
+      }
+      totalCount
+    }
+  }
+}
+
+mutation CreateFlagging($contentId: ID!, $details: String, $kind: NonDeprecatedFlaggingKind!) {
+  createFlagging(input: {
+    contentId: $contentId,
+    details: $details,
+    kind: $kind
+  }) {
+    flagging {
+      kind
+    }
+  }
+}
+
+query BuildPaymentPlan($slug: String!, $amount: String!, $includeRefundedAmount: Boolean!) {
+  project(slug: $slug) {
+    paymentPlan(amount: $amount) {
+      amountIsPledgeOverTimeEligible
+      paymentIncrements {
+        amount {
+          ...paymentIncrementAmount
+        }
+        scheduledCollection
+        refundedAmount @include(if: $includeRefundedAmount) {
+            ...paymentIncrementAmount
+        }
+      }
+    }
+  }
+}
+
+query FetchSimilarProjects($first: Int = 4, $similarToPid: String!, $excludePid: Int!, $recommended: Boolean, $seed: Int, $imageUrlWidth: Int = 1024) {
+  projects(
+    first: $first
+    state: LIVE
+    similarToPid: $similarToPid
+    excludePids: [$excludePid]
+    seed: $seed
+    recommended: $recommended
+  ) {
+    nodes {
+      ...similarProject
+    }
+  }
+}
+
+query VideoFeed($first: Int!, $after: String, $categoryId: String) {
+  videoFeed(first: $first, after: $after, categoryId: $categoryId) {
+    pageInfo {
+      ...pageInfo
+    }
+    nodes {
+      badges {
+        type
+        text
+        icon
+      }
+      project {
+        ...videoFeedProject
+      }
+    }
+  }
+}
+
+mutation AddUserToSecretRewardGroup($projectId: ID!, $secretRewardToken: String!) {
+  addUserToSecretRewardGroup(input: {
+    projectId: $projectId,
+    secretRewardToken: $secretRewardToken
+  }) {
+    project {
+      id
+      rewards {
+        nodes {
+          id
+          name
+        }
       }
     }
   }

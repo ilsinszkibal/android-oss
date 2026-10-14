@@ -21,7 +21,9 @@
 
   <include layout="@layout/horizontal_line_1dp_view" />
 
-  <include layout="@layout/internal_tools_button_view" />
+  <include
+      android:id="@+id/internal_tools_layout"
+      layout="@layout/internal_tools_button_view" />
 
   <TextView
     android:id="@+id/drawer_activity"
@@ -38,5 +40,13 @@
     android:layout_height="wrap_content"
     android:text="@string/Help"
     app:drawableStartCompat="@drawable/ic_help" />
+
+  <TextView
+      android:id="@+id/drawer_settings"
+      style="@style/DrawerTextView"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:text="@string/profile_buttons_settings"
+      app:drawableStartCompat="@drawable/ic_settings" />
 
 </LinearLayout>

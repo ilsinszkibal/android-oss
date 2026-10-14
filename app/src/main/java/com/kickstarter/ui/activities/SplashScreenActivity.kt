@@ -1,0 +1,311 @@
+package com.kickstarter.ui.activities
+
+import android.annotation.SuppressLint
+import android.content.Intent
+import android.net.Uri
+import android.os.Bundle
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
+import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.unit.dp
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.view.WindowCompat
+import com.kickstarter.R
+import com.kickstarter.libs.ActivityRequestCodes
+import com.kickstarter.libs.Environment
+import com.kickstarter.libs.RefTag
+import com.kickstarter.libs.utils.ApplicationUtils
+import com.kickstarter.libs.utils.ThirdPartyEventValues
+import com.kickstarter.libs.utils.UrlUtils.commentId
+import com.kickstarter.libs.utils.UrlUtils.refTag
+import com.kickstarter.libs.utils.UrlUtils.saveFlag
+import com.kickstarter.libs.utils.extensions.addToDisposable
+import com.kickstarter.libs.utils.extensions.getEnvironment
+import com.kickstarter.libs.utils.extensions.getProjectIntent
+import com.kickstarter.libs.utils.extensions.path
+import com.kickstarter.models.SurveyResponse
+import com.kickstarter.ui.IntentKey
+import com.kickstarter.ui.compose.designsystem.kds_create_500
+import com.kickstarter.ui.data.LoginReason
+import com.kickstarter.ui.extensions.setUpConnectivityStatusCheck
+import com.kickstarter.ui.extensions.startPreLaunchProjectActivity
+import com.kickstarter.ui.extensions.startVideoFeed
+import com.kickstarter.ui.extensions.startWebViewActivity
+import com.kickstarter.viewmodels.SplashScreenViewModel
+import com.kickstarter.viewmodels.SplashUIState
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.disposables.CompositeDisposable
+
+@SuppressLint("CustomSplashScreen")
+class SplashScreenActivity : AppCompatActivity() {
+
+    private lateinit var viewModelFactory: SplashScreenViewModel.Factory
+    private val viewModel: SplashScreenViewModel.DeepLinkViewModel by viewModels { viewModelFactory }
+
+    private var disposables = CompositeDisposable()
+
+    private lateinit var environment: Environment
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        /* The order of the following calls before `super.onCreate()` is important to ensure
+         * the Window theme is established correctly and consistently. */
+        val compatSplashScreen = installSplashScreen()
+        enableEdgeToEdge()
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
+        super.onCreate(savedInstanceState)
+        setUpConnectivityStatusCheck(lifecycle)
+
+        this.getEnvironment()?.let {
+            environment = it
+            viewModelFactory = SplashScreenViewModel.Factory(it, intent = intent)
+        }
+
+        compatSplashScreen.setKeepOnScreenCondition {
+            viewModel.uiState.value == SplashUIState.Loading
+        }
+
+        setContent {
+            Surface(color = kds_create_500) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        imageVector = ImageVector.vectorResource(id = R.drawable.ksr_logo_rgb_white),
+                        contentDescription = null,
+                        modifier = Modifier.size(288.dp),
+                    )
+                }
+            }
+        }
+
+        viewModel.runInitializations()
+
+        viewModel.outputs.startBrowser()
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe { url: String -> startBrowser(url) }
+            .addToDisposable(disposables)
+
+        viewModel.outputs.startDiscoveryActivity()
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe {
+                if (it.isPresent) {
+                    startNewDiscoveryActivityWithData(it.get())
+                } else {
+                    startDiscoveryActivity()
+                }
+            }
+            .addToDisposable(disposables)
+
+        viewModel.outputs.startProjectActivity()
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe { uri: Uri -> startProjectActivity(uri) }
+            .addToDisposable(disposables)
+
+        viewModel.outputs.startProjectActivityToSave()
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe { startProjectActivityForSave(it) }
+            .addToDisposable(disposables)
+
+        viewModel.outputs.startProjectActivityForComment()
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe { startProjectActivityForComment(it) }
+            .addToDisposable(disposables)
+
+        viewModel.outputs.startProjectActivityForUpdate()
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe { startProjectActivityForUpdate(it) }
+            .addToDisposable(disposables)
+
+        viewModel.outputs.startProjectActivityForCommentToUpdate()
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe { startProjectActivityForCommentToUpdate(it) }
+            .addToDisposable(disposables)
+
+        viewModel.outputs.startProjectActivityForCheckout()
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe { uri: Uri ->
+                startProjectActivityForCheckout(
+                    uri
+                )
+            }.addToDisposable(disposables)
+
+        viewModel.outputs.finishDeeplinkActivity()
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe { finish() }
+            .addToDisposable(disposables)
+
+        viewModel.outputs.startPreLaunchProjectActivity()
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe {
+                startPreLaunchProjectActivity(it.first, it.second, "DEEPLINK")
+            }.addToDisposable(disposables)
+
+        viewModel.outputs.startProjectSurvey()
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe {
+                val uri = it.first
+                val isLoggedIn = it.second
+                val surveyResponse =
+                    SurveyResponse.builder().urls(
+                        SurveyResponse.Urls.builder()
+                            .web(SurveyResponse.Urls.Web.builder().survey(uri.toString()).build())
+                            .build()
+                    ).build()
+                if (isLoggedIn) {
+                    startSurveyResponseActivity(uri.toString())
+                } else {
+                    startLoginForSurveys(uri.toString())
+                }
+            }.addToDisposable(disposables)
+
+        viewModel.outputs.startPMWebview()
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe { uri ->
+
+                startPMActivity(uri.toString())
+            }.addToDisposable(disposables)
+
+        viewModel.outputs.startVideoFeedActivity()
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe { startVideoFeedActivity() }
+            .addToDisposable(disposables)
+    }
+
+    private fun projectIntent(uri: Uri): Intent {
+        val projectIntent = Intent().getProjectIntent(this)
+            .setData(uri)
+            .putExtra(IntentKey.PREVIOUS_SCREEN, ThirdPartyEventValues.ScreenName.DEEPLINK.value)
+        val ref = refTag(uri.toString())
+        if (ref != null) {
+            projectIntent.putExtra(IntentKey.REF_TAG, RefTag.from(ref))
+        }
+        return projectIntent
+    }
+
+    private fun startDiscoveryActivity() {
+        ApplicationUtils.startNewDiscoveryActivity(this)
+        finish()
+    }
+
+    /*
+     * We will monitor how this Splash Screen evolves before moving this to either
+     * `ActivityExt.kt` or `ApplicationUtils.kt` for reusability.
+     */
+    private fun startNewDiscoveryActivityWithData(data: Uri) {
+        val intent = Intent(this@SplashScreenActivity, DiscoveryActivity::class.java)
+            .setAction(Intent.ACTION_VIEW)
+            .setData(data)
+            .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(intent)
+        finish()
+    }
+
+    private fun startProjectActivity(uri: Uri) {
+        startActivity(projectIntent(uri))
+        finish()
+    }
+
+    private fun startProjectActivityForSave(uri: Uri) {
+        val projectIntent = Intent().getProjectIntent(this)
+            .setData(uri)
+            .putExtra(IntentKey.DEEP_LINK_SCREEN_PROJECT_SAVE, true)
+            .putExtra(IntentKey.PREVIOUS_SCREEN, ThirdPartyEventValues.ScreenName.DEEPLINK.value)
+
+        saveFlag(uri.toString())?.let {
+            projectIntent.putExtra(IntentKey.SAVE_FLAG_VALUE, it)
+        }
+
+        startActivity(projectIntent)
+        finish()
+    }
+
+    private fun startProjectActivityForComment(uri: Uri) {
+        val projectIntent = projectIntent(uri)
+            .putExtra(IntentKey.DEEP_LINK_SCREEN_PROJECT_COMMENT, true)
+
+        commentId(uri.toString())?.let {
+            projectIntent.putExtra(IntentKey.COMMENT, it)
+        }
+
+        startActivity(projectIntent)
+        finish()
+    }
+
+    private fun startProjectActivityForCommentToUpdate(uri: Uri) {
+        val path = uri.path().split("/")
+
+        val projectIntent = projectIntent(uri)
+            .putExtra(IntentKey.DEEP_LINK_SCREEN_PROJECT_UPDATE, path[path.lastIndex - 1])
+            .putExtra(IntentKey.DEEP_LINK_SCREEN_PROJECT_UPDATE_COMMENT, true)
+
+        commentId(uri.toString())?.let {
+            projectIntent.putExtra(IntentKey.COMMENT, it)
+        }
+
+        startActivity(projectIntent)
+        finish()
+    }
+
+    private fun startProjectActivityForUpdate(uri: Uri) {
+        val projectIntent = projectIntent(uri)
+            .putExtra(IntentKey.DEEP_LINK_SCREEN_PROJECT_UPDATE, uri.lastPathSegment)
+
+        startActivity(projectIntent)
+        finish()
+    }
+
+    private fun startProjectActivityForCheckout(uri: Uri) {
+        val projectIntent = projectIntent(uri)
+            .putExtra(IntentKey.EXPAND_PLEDGE_SHEET, true)
+        startActivity(projectIntent)
+        finish()
+    }
+
+    private fun startBrowser(url: String) {
+        ApplicationUtils.openUrlExternally(this, url)
+        finish()
+    }
+
+    private fun startLoginForSurveys(surveyResponseUrl: String) {
+        val intent = Intent(this, LoginToutActivity::class.java)
+            .putExtra(IntentKey.LOGIN_REASON, LoginReason.DEFAULT)
+            .putExtra(IntentKey.DEEPLINK_SURVEY_RESPONSE, surveyResponseUrl)
+        startActivityForResult(intent, ActivityRequestCodes.LOGIN_FLOW)
+    }
+
+    private fun startSurveyResponseActivity(surveyResponseUrl: String) {
+        ApplicationUtils.startNewDiscoveryActivity(this)
+        val intent = Intent(this, SurveyResponseActivity::class.java)
+            .putExtra(IntentKey.DEEPLINK_SURVEY_RESPONSE, surveyResponseUrl)
+        startActivity(intent)
+        finish()
+    }
+
+    private fun startPMActivity(url: String) {
+        ApplicationUtils.startNewDiscoveryActivity(this)
+        startWebViewActivity(url)
+        finish()
+    }
+
+    private fun startVideoFeedActivity() {
+        ApplicationUtils.startNewDiscoveryActivity(this)
+        startVideoFeed(ThirdPartyEventValues.ScreenName.DEEPLINK.value)
+        finish()
+    }
+
+    override fun onDestroy() {
+        disposables.clear()
+        super.onDestroy()
+    }
+}

@@ -3,8 +3,31 @@ package com.kickstarter.models
 import com.kickstarter.mock.factories.UserFactory
 import com.kickstarter.services.apiresponses.AccessTokenEnvelope
 import junit.framework.TestCase
+import org.junit.Test
 
 class AccessTokenEnvelopeTest : TestCase() {
+
+    @Test
+    fun testDefaultInit() {
+        val accessToken = "test"
+        val user = UserFactory.canadianUser()
+        val loginWithFacebookBody = AccessTokenEnvelope.builder()
+            .accessToken(accessToken)
+            .user(user)
+            .build()
+
+        assertEquals(loginWithFacebookBody.accessToken(), accessToken)
+        assertEquals(loginWithFacebookBody.user(), user)
+    }
+
+    @Test
+    fun testAccessTokenEnvelopeToBuilder() {
+        val user = UserFactory.canadianUser()
+        val loginWithFacebookBody = AccessTokenEnvelope.builder().build().toBuilder()
+            .user(user).build()
+
+        assertEquals(loginWithFacebookBody.user(), user)
+    }
 
     fun testEquals_whenSecondEnvelopNull_returnFalse() {
         val envelopA = AccessTokenEnvelope.builder().user(UserFactory.user()).accessToken("SomeToken").build()
@@ -25,7 +48,7 @@ class AccessTokenEnvelopeTest : TestCase() {
     fun testEquals_whenSameUserDifferentToken_returnFalse() {
         val user = UserFactory.user()
         val envelopA = AccessTokenEnvelope.builder().user(user).accessToken("SomeToken").build()
-        val envelopB =  AccessTokenEnvelope.builder().user(user).accessToken("OtherToken").build()
+        val envelopB = AccessTokenEnvelope.builder().user(user).accessToken("OtherToken").build()
 
         assertFalse(envelopA == envelopB)
     }
@@ -35,7 +58,7 @@ class AccessTokenEnvelopeTest : TestCase() {
         val userA = UserFactory.user()
         val userB = UserFactory.germanUser()
         val envelopA = AccessTokenEnvelope.builder().user(userA).accessToken(token).build()
-        val envelopB =  AccessTokenEnvelope.builder().user(userB).accessToken(token).build()
+        val envelopB = AccessTokenEnvelope.builder().user(userB).accessToken(token).build()
 
         assertFalse(envelopA == envelopB)
     }

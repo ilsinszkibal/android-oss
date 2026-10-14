@@ -24,8 +24,14 @@
             android:importantForAccessibility="yes"
             android:orientation="vertical">
 
-            <include layout="@layout/fragment_pledge_section_header_reward_sumary"/>
-            <include android:visibility="gone" layout="@layout/fragment_pledge_section_reward_summary" />
+            <include
+                android:id="@+id/pledge_section_header_reward_summary"
+                layout="@layout/fragment_pledge_section_header_reward_sumary" />
+
+            <include
+                android:id="@+id/pledge_section_reward_summary"
+                layout="@layout/fragment_pledge_section_reward_summary"
+                android:visibility="gone" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -36,27 +42,31 @@
                 android:paddingStart="@dimen/activity_vertical_margin"
                 android:paddingEnd="@dimen/activity_vertical_margin">
 
-                <include layout="@layout/fragment_pledge_section_shipping"
-                    android:id="@+id/shipping_rules_row_static" />
+                <include
+                    android:id="@+id/pledge_section_pickup_location"
+                    layout="@layout/fragment_pledge_section_local_pickup" />
+                <include
+                    android:id="@+id/pledge_section_shipping"
+                    layout="@layout/fragment_pledge_section_shipping" />
 
-                <include layout="@layout/fragment_pledge_section_editable_shipping"
-                    android:id="@+id/shipping_rules_row"/>
+                <include
+                    android:id="@+id/pledge_section_summary_pledge"
+                    layout="@layout/fragment_pledge_section_summary_pledge" />
 
-                <include layout="@layout/fragment_pledge_section_pledge_amount" />
+                <include
+                    android:id="@+id/pledge_section_summary_shipping"
+                    layout="@layout/fragment_pledge_section_summary_shipping" />
 
-                <include layout="@layout/fragment_pledge_section_bonus_support" />
-
-                <include layout="@layout/fragment_pledge_section_summary_pledge" />
-
-                <include layout="@layout/fragment_pledge_section_summary_shipping" />
-
-                <include layout="@layout/fragment_pledge_section_summary_bonus"/>
+                <include
+                    android:id="@+id/pledge_section_summary_bonus"
+                    layout="@layout/fragment_pledge_section_summary_bonus" />
 
                 <include
                     android:id="@+id/divider_total"
                     layout="@layout/horizontal_line_1dp_view" />
 
                 <include
+                    android:id="@+id/pledge_section_total"
                     layout="@layout/fragment_pledge_section_total"
                     tools:visibility="visible" />
 
@@ -70,20 +80,26 @@
                         android:id="@+id/deadline_warning"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/If_the_project_reaches_its_funding_goal_you_will_be_charged_total_on_project_deadline"
+                        android:text="@string/If_the_project_reaches_its_funding_goal_you_will_be_charged_total_on_project_deadline_and_receive_proof_of_pledge"
                         android:visibility="invisible" />
 
                 </FrameLayout>
 
             </LinearLayout>
 
-            <include layout="@layout/fragment_pledge_section_payment" />
+            <include
+                android:id="@+id/pledge_section_payment"
+                layout="@layout/fragment_pledge_section_payment" />
 
-            <include layout="@layout/fragment_pledge_section_accountability" />
+            <include
+                android:id="@+id/pledge_section_accountability"
+                layout="@layout/fragment_pledge_section_accountability" />
 
         </LinearLayout>
 
     </androidx.core.widget.NestedScrollView>
 
-    <include layout="@layout/fragment_pledge_section_footer" />
+    <include
+        android:id="@+id/pledge_section_footer"
+        layout="@layout/fragment_pledge_section_footer" />
 </LinearLayout>

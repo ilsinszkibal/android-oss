@@ -11,9 +11,13 @@
 
   <com.google.android.material.appbar.AppBarLayout
     android:layout_width="match_parent"
-    android:layout_height="wrap_content">
+    android:layout_height="wrap_content"
+      android:id="@+id/account_appbar_layout"
+      android:background="@color/kds_white">
 
-    <include layout="@layout/account_toolbar" />
+
+    <include android:id="@+id/account_toolbar"
+        layout="@layout/account_toolbar" />
 
   </com.google.android.material.appbar.AppBarLayout>
 

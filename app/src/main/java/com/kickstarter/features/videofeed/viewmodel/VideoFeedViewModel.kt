@@ -1,0 +1,180 @@
+package com.kickstarter.features.videofeed.viewmodel
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import androidx.media3.common.PlaybackException
+import com.google.firebase.crashlytics.FirebaseCrashlytics
+import com.kickstarter.features.videofeed.data.VideoFeedItem
+import com.kickstarter.libs.Environment
+import com.kickstarter.libs.utils.EventContextValues.CtaContextName
+import com.kickstarter.models.Project
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.plus
+import kotlinx.coroutines.rx2.asFlow
+import timber.log.Timber
+import kotlin.coroutines.EmptyCoroutineContext
+
+data class VideoFeedUIState(
+    val items: List<VideoFeedItem> = emptyList(),
+    val isLoading: Boolean = false,
+    val hasMore: Boolean = true
+)
+
+class VideoFeedViewModel(
+    private val environment: Environment,
+    private val entrySurface: String,
+    private val testDispatcher: CoroutineDispatcher? = null
+) : ViewModel() {
+
+    private val scope = viewModelScope + (testDispatcher ?: EmptyCoroutineContext)
+    private val apolloClient = requireNotNull(environment.apolloClientV2())
+    private val currentUserV2 = requireNotNull(environment.currentUserV2())
+    private val analyticEvents = requireNotNull(environment.analytics())
+
+    private val _videoFeedUIState = MutableStateFlow(VideoFeedUIState())
+    val videoFeedUIState: StateFlow<VideoFeedUIState> = _videoFeedUIState.asStateFlow()
+
+    private val _isUserLoggedIn = MutableStateFlow(false)
+    val isUserLoggedIn: StateFlow<Boolean> = _isUserLoggedIn.asStateFlow()
+
+    private var errorAction: (message: String?) -> Unit = {}
+
+    private var nextPage: String? = null
+    private var hasMore: Boolean = true
+
+    init {
+        scope.launch {
+            currentUserV2.isLoggedIn.asFlow().collect { _isUserLoggedIn.value = it }
+        }
+
+        loadVideoFeed()
+    }
+
+    fun provideErrorAction(errorAction: (message: String?) -> Unit) {
+        this.errorAction = errorAction
+    }
+
+    fun loadVideoFeed() {
+        if (!hasMore) return
+        scope.launch {
+            if (_videoFeedUIState.value.isLoading) return@launch
+            try {
+                _videoFeedUIState.emit(_videoFeedUIState.value.copy(isLoading = true))
+
+                val result = apolloClient.getVideoFeed(first = 10, cursor = nextPage)
+
+                if (result.isFailure) {
+                    Timber.e(result.exceptionOrNull())
+                    errorAction.invoke(null)
+                    return@launch
+                }
+
+                val envelope = result.getOrNull()
+                nextPage = envelope?.pageInfo?.endCursor
+                hasMore = envelope?.pageInfo?.hasNextPage ?: false
+                val newItems = envelope?.items ?: emptyList()
+
+                _videoFeedUIState.emit(
+                    VideoFeedUIState(
+                        items = _videoFeedUIState.value.items + newItems,
+                        isLoading = false,
+                        hasMore = hasMore
+                    )
+                )
+            } finally {
+                if (_videoFeedUIState.value.isLoading) {
+                    _videoFeedUIState.emit(_videoFeedUIState.value.copy(isLoading = false))
+                }
+            }
+        }
+    }
+
+    fun bookmarkProject(project: Project, index: Int) {
+        scope.launch {
+            val isStarred = project.isStarred()
+            val items = _videoFeedUIState.value.items
+            if (index !in items.indices) return@launch
+
+            // Optimistic update so the animation starts immediately on tap
+            val newWatchesCount = if (isStarred) items[index].project.watchesCount() - 1 else items[index].project.watchesCount() + 1
+            val optimisticItems = items.toMutableList()
+            optimisticItems[index] = items[index].copy(
+                project = items[index].project.toBuilder()
+                    .isStarred(!isStarred)
+                    .watchesCount(newWatchesCount)
+                    .build()
+            )
+            _videoFeedUIState.emit(_videoFeedUIState.value.copy(items = optimisticItems))
+
+            val result = if (isStarred) {
+                apolloClient.unWatchProjectSuspend(project)
+            } else {
+                apolloClient.watchProjectSuspend(project)
+            }
+
+            if (result.isFailure) {
+                Timber.e(result.exceptionOrNull())
+                errorAction.invoke(null)
+                // Revert optimistic update on failure
+                _videoFeedUIState.emit(_videoFeedUIState.value.copy(items = items))
+            }
+        }
+    }
+
+    fun onVideoImpression(item: VideoFeedItem, position: Int) {
+        analyticEvents.trackVideoFeedImpression(item, position, entrySurface)
+    }
+
+    fun onVideoPageSettled(
+        videoFeedItem: VideoFeedItem,
+        toPosition: Int,
+        fromVideoFeedItem: VideoFeedItem,
+        watchTimeMs: Long?,
+        videoDurationMs: Long?
+    ) {
+        analyticEvents.trackVideoFeedPageViewed(videoFeedItem, toPosition, fromVideoFeedItem, watchTimeMs, videoDurationMs, entrySurface)
+    }
+
+    fun onProgressBarTapped(item: VideoFeedItem, percentageWatched: Float, watchTimeAtClick: Long? = null) {
+        analyticEvents.trackVideoFeedProgressBarTap(item, percentageWatched, watchTimeAtClick)
+    }
+
+    fun onCTAClicked(project: Project, videoId: Long, ctaType: CtaContextName, watchTimeAtClick: Long? = null) {
+        analyticEvents.trackVideoFeedCTAClicked(project, videoId, ctaType, watchTimeAtClick)
+    }
+
+    /**
+     * Observe-only telemetry for a video playback failure. Records a Crashlytics non-fatal so we can
+     * see, segmented by device/OS, how often feed videos fail and whether it was the on-screen video
+     * ([isActive]) — e.g. [PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED] flags a device
+     * running out of hardware-decoder budget. Wrapped so telemetry can never affect playback.
+     */
+    fun onVideoPlaybackError(item: VideoFeedItem, position: Int, error: PlaybackException, isActive: Boolean) {
+        try {
+            FirebaseCrashlytics.getInstance().apply {
+                setCustomKey("video_feed_video_id", item.videoId)
+                setCustomKey("video_feed_error_code", error.errorCodeName)
+                setCustomKey("video_feed_is_active", isActive)
+                setCustomKey("video_feed_position", position)
+                recordException(error)
+            }
+        } catch (t: Throwable) {
+            Timber.w(t, "Failed to record video feed playback error telemetry")
+        }
+    }
+
+    class Factory(
+        private val environment: Environment,
+        private val entrySurface: String,
+        private val testDispatcher: CoroutineDispatcher? = null
+    ) : ViewModelProvider.Factory {
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            return VideoFeedViewModel(environment, entrySurface, testDispatcher) as T
+        }
+    }
+}

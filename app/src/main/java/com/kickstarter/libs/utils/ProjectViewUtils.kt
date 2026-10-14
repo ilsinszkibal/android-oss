@@ -12,8 +12,8 @@ import com.kickstarter.R
 import com.kickstarter.libs.KSCurrency
 import com.kickstarter.libs.NumberOptions
 import com.kickstarter.libs.models.Country
-import com.kickstarter.libs.models.OptimizelyExperiment
 import com.kickstarter.libs.utils.extensions.isErrored
+import com.kickstarter.libs.utils.extensions.pledgeManagementAvailable
 import com.kickstarter.libs.utils.extensions.trimAllWhitespace
 import com.kickstarter.models.Project
 import com.kickstarter.models.User
@@ -27,7 +27,7 @@ object ProjectViewUtils {
      */
     @ColorRes
     fun pledgeActionButtonColor(project: Project, currentUser: User?): Int {
-        return if (project.isBacking && project.isLive) {
+        return if (project.isBacking() && project.isLive) {
             R.color.button_pledge_manage
         } else if (!project.isLive || project.creator().id() == currentUser?.id()) {
             when {
@@ -40,21 +40,15 @@ object ProjectViewUtils {
     }
 
     fun pledgeActionButtonText(project: Project, currentUser: User?): Int {
-        return pledgeActionButtonText(project, currentUser, null)
-    }
-
-    fun pledgeActionButtonText(project: Project, currentUser: User?, variant: OptimizelyExperiment.Variant?): Int {
-        return if (project.creator().id() == currentUser?.id()) {
+        return if (project.pledgeManagementAvailable()) {
+            return R.string.Go_to_pledge_manager
+        } else if (project.creator().id() == currentUser?.id()) {
             R.string.View_your_rewards
-        } else if (!project.isBacking && project.isLive) {
-            when (variant) {
-                OptimizelyExperiment.Variant.VARIANT_1 -> R.string.See_the_rewards
-                OptimizelyExperiment.Variant.VARIANT_2 -> R.string.View_the_rewards
-                else -> R.string.Back_this_project
-            }
-        } else if (project.isBacking && project.isLive) {
+        } else if (!project.isBacking() && project.isLive) {
+            R.string.Back_this_project
+        } else if (project.isBacking() && project.isLive) {
             R.string.Manage
-        } else if (project.isBacking && !project.isLive) {
+        } else if (project.isBacking() && !project.isLive) {
             when {
                 project.backing()?.let { backing -> backing.isErrored() } == true -> R.string.Manage
                 else -> R.string.View_your_pledge
@@ -68,11 +62,11 @@ object ProjectViewUtils {
     fun pledgeToolbarTitle(project: Project, currentUser: User?): Int {
         return if (project.creator().id() == currentUser?.id()) {
             R.string.View_your_rewards
-        } else if (!project.isBacking && project.isLive) {
+        } else if (!project.isBacking() && project.isLive) {
             R.string.Back_this_project
-        } else if (project.isBacking && project.isLive) {
+        } else if (project.isBacking() && project.isLive) {
             R.string.Manage_your_pledge
-        } else if (project.isBacking && !project.isLive) {
+        } else if (project.isBacking() && !project.isLive) {
             R.string.View_your_pledge
         } else {
             R.string.View_rewards
@@ -138,7 +132,7 @@ object ProjectViewUtils {
         val formattedCurrency = ksCurrency.format(value, project, RoundingMode.HALF_UP)
 
         val country = Country.findByCurrencyCode(project.currency())
-                ?: return SpannableStringBuilder()
+            ?: return SpannableStringBuilder()
 
         val currencySymbolToDisplay = ksCurrency.getCurrencySymbol(country, true)
 

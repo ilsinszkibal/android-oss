@@ -1,0 +1,545 @@
+package com.kickstarter.ui.compose.designsystem
+
+import android.content.res.Configuration
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.Popup
+import com.kickstarter.libs.utils.safeLet
+import com.kickstarter.ui.compose.designsystem.KSTheme.colors
+import com.kickstarter.ui.compose.designsystem.KSTheme.dimensions
+import com.kickstarter.ui.compose.designsystem.KSTheme.typographyV2
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
+
+// Snackbars
+@Composable
+@Preview(name = "Light", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+fun SnackbarsPreview() {
+    KSTheme {
+        Column() {
+            KSErrorRoundedText(text = "This is some sort of error, better do something about it.  Or don't, im just a text box!")
+            Spacer(Modifier.height(dimensions.listItemSpacingMediumSmall))
+            KSHeadsUpRoundedText(text = "Heads up, something is going on that needs your attention.  Maybe its important, maybe its informational.")
+            Spacer(Modifier.height(dimensions.listItemSpacingMediumSmall))
+            KSSuccessRoundedText(text = "Hey, something went right and all is good!")
+        }
+    }
+}
+
+enum class KSSnackbarTypes {
+    KS_ERROR,
+    KS_HEADS_UP,
+    KS_SUCCESS
+}
+
+@Composable
+fun KSErrorSnackbar(
+    text: String,
+    padding: PaddingValues = PaddingValues(dimensions.none)
+) {
+    Snackbar(
+        containerColor = colors.backgroundDangerBold,
+        content = {
+            KSErrorRoundedText(text = text, padding = padding)
+        }
+    )
+}
+
+@Composable
+fun KSHeadsupSnackbar(
+    text: String,
+    padding: PaddingValues = PaddingValues(dimensions.none)
+) {
+    Snackbar(
+        containerColor = colors.backgroundActionPressed,
+        content = {
+            KSHeadsUpRoundedText(text = text, padding = padding)
+        }
+    )
+}
+
+@Composable
+fun KSSuccessSnackbar(
+    text: String,
+    padding: PaddingValues = PaddingValues(dimensions.none)
+) {
+    Snackbar(
+        containerColor = colors.backgroundAccentGreenSubtle,
+        content = {
+            KSSuccessRoundedText(text = text, padding = padding)
+        }
+    )
+}
+
+@Composable
+@Preview(name = "Light", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+fun KSVideoFeedSnackbarPreview() {
+    KSTheme {
+        KSVideoFeedSnackbar(text = "Couldn't load video")
+    }
+}
+
+@Composable
+fun KSVideoFeedSnackbar(
+    text: String,
+    modifier: Modifier = Modifier,
+    hazeState: HazeState? = null
+) {
+    val baseColor = Color(0xFF2B2B2D).copy(alpha = 0.45f)
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(dimensions.radiusMedium))
+            .then(
+                if (hazeState != null) {
+                    Modifier.hazeEffect(state = hazeState) {
+                        blurRadius = 28.dp
+                        noiseFactor = 0.05f
+                        backgroundColor = baseColor
+                        tints = listOf(HazeTint(baseColor))
+                    }
+                } else {
+                    Modifier.background(baseColor)
+                }
+            )
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.14f),
+                shape = RoundedCornerShape(dimensions.radiusMedium)
+            )
+            .padding(all = dimensions.paddingMedium),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            color = Color.White,
+            style = typographyV2.bodyMD,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+fun KSRoundedPaddedText(
+    background: Color,
+    textColor: Color,
+    text: String,
+    padding: PaddingValues = PaddingValues(dimensions.paddingMedium)
+) {
+    Text(
+        modifier = Modifier
+            .background(background, shape = shapes.small)
+            .fillMaxWidth()
+            .padding(padding),
+        text = text,
+        color = textColor,
+    )
+}
+
+@Composable
+fun KSErrorRoundedText(
+    text: String,
+    padding: PaddingValues = PaddingValues(dimensions.paddingMedium)
+) {
+    KSRoundedPaddedText(
+        background = colors.backgroundDangerBold,
+        textColor = colors.textInversePrimary,
+        text = text,
+        padding = padding
+    )
+}
+
+@Composable
+fun KSHeadsUpRoundedText(
+    text: String,
+    padding: PaddingValues = PaddingValues(dimensions.paddingMedium)
+) {
+    KSRoundedPaddedText(
+        background = colors.backgroundActionPressed,
+        textColor = colors.textInversePrimary,
+        text = text,
+        padding = padding
+    )
+}
+
+@Composable
+fun KSSuccessRoundedText(
+    text: String,
+    padding: PaddingValues = PaddingValues(dimensions.paddingMedium)
+) {
+    KSRoundedPaddedText(
+        background = colors.backgroundAccentGreenSubtle,
+        textColor = colors.textPrimary,
+        text = text,
+        padding = padding
+    )
+}
+
+// Dialogs
+@Composable
+@Preview(name = "Light", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+fun AlertDialogNoHeadlinePreview() {
+    KSTheme {
+        Column(
+            Modifier
+                .background(color = colors.kds_support_400)
+                .fillMaxWidth()
+        ) {
+            val showDialog = remember { mutableStateOf(true) }
+            KSAlertDialogNoHeadline(
+                setShowDialog = { showDialog.value },
+                bodyText = "Alert dialog prompt",
+                leftButtonText = "BUTTON",
+                rightButtonText = "BUTTON"
+            )
+        }
+    }
+}
+
+@Composable
+@Preview(name = "Light", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+fun AlertDialogPreview() {
+    KSTheme {
+        Column(
+            Modifier
+                .background(color = colors.kds_support_400)
+                .fillMaxWidth()
+        ) {
+            val showDialog = remember { mutableStateOf(true) }
+            KSAlertDialog(
+                setShowDialog = { showDialog.value },
+                headlineText = "Headline",
+                bodyText = "Apparently we had reached a great height in the atmosphere for the...",
+                leftButtonText = "BUTTON",
+                rightButtonText = "BUTTON"
+            )
+        }
+    }
+}
+
+@Composable
+@Preview(name = "Light", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+fun TooltipPreview() {
+    KSTheme {
+        Column(
+            Modifier
+                .background(color = colors.kds_support_400)
+                .fillMaxWidth()
+        ) {
+            val showDialog = remember { mutableStateOf(true) }
+            KsTooltip(
+                setShowDialog = { showDialog.value },
+                headlineText = "Short title",
+                bodyText = "This text should be informative copy only. No actions should live in this tooltip.",
+            )
+        }
+    }
+}
+
+@Composable
+@Preview(name = "Light", uiMode = Configuration.UI_MODE_NIGHT_NO)
+@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+fun InterceptPreview() {
+    KSTheme {
+        Column(
+            Modifier
+                .background(color = colors.kds_support_400)
+                .fillMaxWidth()
+        ) {
+            val showDialog = remember { mutableStateOf(true) }
+            KSIntercept(
+                setShowDialog = { showDialog.value },
+                bodyText = "Take our survey to help us make a better app for you.",
+                leftButtonText = "BUTTON",
+                rightButtonText = "ACTION"
+            )
+        }
+    }
+}
+
+@Composable
+fun KSDialog(
+    setShowDialog: (Boolean) -> Unit,
+    content: @Composable () -> Unit
+) {
+    Dialog(onDismissRequest = { setShowDialog(false) }) {
+        content()
+    }
+}
+
+@Composable
+fun KSDialogVisual(
+    modifier: Modifier,
+    setShowDialog: (Boolean) -> Unit,
+    headline: String? = null,
+    headlineStyle: TextStyle? = null,
+    headlineSpacing: Dp? = null,
+    bodyText: String,
+    bodyStyle: TextStyle,
+    rightButtonText: String? = null,
+    rightButtonTextStyle: TextStyle? = null,
+    rightButtonTextColor: Color? = null,
+    rightButtonAction: (() -> Unit)? = null,
+    rightButtonModifier: Modifier = Modifier,
+    rightButtonColor: Color? = null,
+    leftButtonText: String? = null,
+    leftButtonTextStyle: TextStyle? = null,
+    leftButtonTextColor: Color? = null,
+    leftButtonAction: (() -> Unit)? = null,
+    leftButtonModifier: Modifier = Modifier,
+    leftButtonColor: Color? = null,
+    additionalButtonSpacing: Dp? = null,
+) {
+    Column(
+        modifier = modifier
+    ) {
+        // Headline
+        safeLet(headline, headlineStyle, headlineSpacing) { text, style, space ->
+            Text(text = text, style = style, color = colors.textPrimary)
+            Spacer(modifier = Modifier.height(space))
+        }
+
+        // Body
+        Text(
+            modifier = Modifier.padding(end = dimensions.paddingSmall),
+            text = bodyText,
+            style = bodyStyle,
+            color = colors.textPrimary
+        )
+
+        Row(
+            Modifier
+                .padding(top = dimensions.paddingMedium)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            // Left Button
+            safeLet(leftButtonText, leftButtonTextStyle) { text, style ->
+                Button(
+                    modifier = leftButtonModifier,
+                    onClick = {
+                        leftButtonAction?.invoke()
+                        setShowDialog(false)
+                    },
+                    colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = leftButtonColor ?: colors.backgroundSurfacePrimary
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(dimensions.none)
+                ) {
+                    Text(
+                        text = text,
+                        style = style,
+                        color = leftButtonTextColor ?: style.color
+                    )
+                }
+            }
+
+            Spacer(
+                modifier = Modifier.width(
+                    additionalButtonSpacing ?: dimensions.dialogButtonSpacing
+                )
+            )
+
+            // Right Button
+            safeLet(rightButtonText, rightButtonTextStyle) { text, style ->
+                Button(
+                    modifier = rightButtonModifier,
+                    onClick = {
+                        rightButtonAction?.invoke()
+                        setShowDialog(false)
+                    },
+                    colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = rightButtonColor ?: colors.backgroundSurfacePrimary
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(dimensions.none)
+                ) {
+                    Text(
+                        text = text,
+                        style = style,
+                        color = rightButtonTextColor ?: style.color
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun KSAlertDialogNoHeadline(
+    setShowDialog: (Boolean) -> Unit,
+    bodyText: String,
+    leftButtonText: String? = null,
+    leftButtonAction: (() -> Unit)? = null,
+    rightButtonText: String? = null,
+    rightButtonAction: (() -> Unit)? = null
+) {
+    KSDialog(
+        setShowDialog = setShowDialog,
+        content = {
+            KSDialogVisual(
+                modifier = Modifier
+                    .width(dimensions.dialogWidth)
+                    .background(color = colors.backgroundSurfacePrimary, shape = shapes.small)
+                    .padding(
+                        start = dimensions.paddingLarge,
+                        top = dimensions.paddingLarge,
+                        bottom = dimensions.paddingSmall,
+                        end = dimensions.paddingSmall
+                    ),
+                setShowDialog = setShowDialog,
+                bodyText = bodyText,
+                bodyStyle = typographyV2.bodyLG,
+                leftButtonText = leftButtonText,
+                leftButtonAction = leftButtonAction,
+                leftButtonTextStyle = typographyV2.buttonLabel,
+                rightButtonText = rightButtonText,
+                rightButtonAction = rightButtonAction,
+                rightButtonTextStyle = typographyV2.buttonLabel
+            )
+        }
+    )
+}
+
+@Composable
+fun KSAlertDialog(
+    setShowDialog: (Boolean) -> Unit,
+    headlineText: String,
+    bodyText: String,
+    leftButtonText: String?,
+    leftButtonAction: (() -> Unit)? = null,
+    rightButtonText: String?,
+    rightButtonAction: (() -> Unit)? = null
+) {
+    KSDialog(
+        setShowDialog = setShowDialog,
+        content = {
+            KSDialogVisual(
+                modifier = Modifier
+                    .width(dimensions.dialogWidth)
+                    .background(color = colors.backgroundSurfacePrimary, shape = shapes.small)
+                    .padding(
+                        start = dimensions.paddingLarge,
+                        top = dimensions.paddingLarge,
+                        bottom = dimensions.paddingSmall,
+                        end = dimensions.paddingSmall
+                    ),
+                setShowDialog = setShowDialog,
+                headline = headlineText,
+                headlineStyle = typographyV2.headingXL,
+                headlineSpacing = dimensions.paddingMedium,
+                bodyText = bodyText,
+                bodyStyle = typographyV2.bodyLG,
+                leftButtonText = leftButtonText,
+                leftButtonAction = leftButtonAction,
+                leftButtonTextStyle = typographyV2.buttonLabel,
+                rightButtonText = rightButtonText,
+                rightButtonAction = rightButtonAction,
+                rightButtonTextStyle = typographyV2.buttonLabel
+            )
+        }
+    )
+}
+
+@Composable
+fun KsTooltip(
+    setShowDialog: (Boolean) -> Unit,
+    headlineText: String,
+    bodyText: String,
+    alignment: Alignment? = null
+) {
+    Popup(
+        alignment = alignment ?: Alignment.BottomCenter,
+        onDismissRequest = { setShowDialog(false) }
+    ) {
+        KSDialogVisual(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(color = colors.kds_white)
+                .padding(dimensions.paddingLarge),
+            setShowDialog = { },
+            bodyText = bodyText,
+            bodyStyle = typographyV2.bodyMD,
+            headline = headlineText,
+            headlineStyle = typographyV2.headLine,
+            headlineSpacing = dimensions.paddingSmall
+        )
+    }
+}
+
+@Composable
+fun KSIntercept(
+    setShowDialog: (Boolean) -> Unit,
+    bodyText: String,
+    leftButtonText: String,
+    leftButtonAction: (() -> Unit)? = null,
+    rightButtonText: String,
+    rightButtonAction: (() -> Unit)? = null,
+    alignment: Alignment? = null
+) {
+    Popup(
+        alignment = alignment ?: Alignment.BottomCenter,
+        onDismissRequest = { setShowDialog(false) }
+    ) {
+        KSDialogVisual(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(color = colors.kds_support_100, shape = shapes.small)
+                .padding(
+                    start = dimensions.paddingMedium,
+                    top = dimensions.paddingLarge,
+                    end = dimensions.paddingMedium,
+                    bottom = dimensions.paddingMedium
+                ),
+            setShowDialog = {},
+            bodyText = bodyText,
+            bodyStyle = typographyV2.headingLG,
+            leftButtonText = leftButtonText,
+            leftButtonAction = leftButtonAction,
+            leftButtonTextStyle = typographyV2.buttonLabel,
+            leftButtonTextColor = facebook_blue,
+            leftButtonColor = colors.kds_support_100,
+            rightButtonText = rightButtonText,
+            rightButtonAction = rightButtonAction,
+            rightButtonTextStyle = typographyV2.buttonLabel,
+            rightButtonTextColor = colors.kds_white,
+            rightButtonColor = colors.kds_trust_500,
+            additionalButtonSpacing = dimensions.paddingSmall
+        )
+    }
+}
